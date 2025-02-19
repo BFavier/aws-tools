@@ -1,0 +1,42 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Defines the databases resources",
+    "Parameters":
+    {
+    },
+    "Resources" :
+    {
+        "GeographyDatabaseTable":
+        {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties":
+            {
+                "TableName": "geography_database",
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "category",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "value",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "category",
+                        "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "value",
+                        "KeyType": "RANGE"
+                    }
+                ],
+                "BillingMode": "PAY_PER_REQUEST"
+            }
+        }
+    },
+    "Outputs":
+    {
+    }
+}

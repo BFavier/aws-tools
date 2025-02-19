@@ -1,0 +1,54 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Defines the route53 hosted zone and ssl certificate resources",
+    "Parameters":
+    {
+        "DomainName":
+        {
+            "Type": "String",
+            "Description": "Domaine name of the website",
+            "AllowedPattern": "^[a-z0-9-]+\\.[a-z]{2,}$",
+            "ConstraintDescription": "Must be a valid domaine name"
+        }
+    },
+    "Resources":
+    {
+        "HostedZone":
+        {
+            "Type": "AWS::Route53::HostedZone",
+            "Properties":
+            {
+                "Name": {"Ref": "DomainName"}
+            }
+        },
+        "Certificate":
+        {
+            "Type": "AWS::CertificateManager::Certificate",
+            "Properties":
+            {
+                "DomainName": {"Fn::Sub": "*.${DomainName}"},
+                "ValidationMethod": "DNS",
+                "DomainValidationOptions": [{"DomainName": {"Fn::Sub": "*.${DomainName}"}, "HostedZoneId": {"Ref": "HostedZone"}}],
+                "Tags": [{"Key": "Name", "Value": "SSLCertificate"}]
+            }
+        }
+    },
+    "Outputs":
+    {
+        "CertificateArn":
+        {
+            "Value": {"Ref": "Certificate"},
+            "Export": {"Name": "CertificateArn"}
+        },
+        "DomainName":
+        {
+            "Value": {"Ref": "DomainName"},
+            "Export": {"Name": "DomainName"}
+        },
+        "HostedZoneId":
+        {
+            "Value": {"Ref": "HostedZone"},
+            "Export": {"Name": "HostedZoneId"}
+        }
+    }
+}

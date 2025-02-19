@@ -1,0 +1,359 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Defines some resources so that emails adressed to the registered domain name could be received",
+    "Parameters":
+    {
+        "BucketName":
+        {
+            "Type": "String",
+            "Default": "emails-bucket",
+            "Description": "The name of the S3 bucket"
+        },
+        "HookRoute":
+        {
+            "Type": "String",
+            "Default": "https://api.domain-name.com/mail-bounce-or-complaint/",
+            "Description": "The route to call when a bounce or complaint is received"
+        },
+        "RecipientPrefixes":
+        {
+            "Type": "CommaDelimitedList",
+            "Default": "jean.dupont,contact",
+            "Description": "List of email addresses (without the @domain-name.com) that can receive emails"
+        }
+    },
+    "Resources":
+    {
+        "EmailsBucket":
+        {
+            "Type": "AWS::S3::Bucket",
+            "Properties":
+            {
+                "BucketName": {"Ref": "BucketName"},
+                "AccessControl": "Private"
+            }
+        },
+        "SESMailReceiptRuleSet":
+        {
+            "Type": "AWS::SES::ReceiptRuleSet",
+            "Properties":
+            {
+                "RuleSetName": "EMailReceiptRuleSet"
+            }
+        },
+        "SESMailReceiptRule":
+        {
+            "Type": "AWS::SES::ReceiptRule",
+            "DependsOn": ["InvokeDomainVerificationLambda", "BucketPolicy"],
+            "Properties":
+            {
+                "RuleSetName": { "Ref": "SESMailReceiptRuleSet" },
+                "Rule":
+                {
+                    "Name": "StoreEmailInS3",
+                    "Recipients": {
+                        "Fn::Map": [
+                            "user",
+                            {"Ref": "RecipientPrefixes"},
+                            {"Fn::Sub": [
+                                "${user}@${domain}",
+                                {"domain": {"Fn::ImportValue": "DomainName"}}
+                            ]}
+                        ]
+                    },
+                    "Actions":
+                    [
+                        {
+                            "S3Action":
+                            {
+                                "BucketName": {"Ref": "EmailsBucket"},
+                                "ObjectKeyPrefix": "received-emails/"
+                            }
+                        }
+                    ],
+                    "Enabled": true,
+                    "ScanEnabled": true
+                }
+            }
+        },
+        "BucketPolicy":
+        {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties":
+            {
+                "Bucket": {"Ref": "EmailsBucket"},
+                "PolicyDocument":
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ses.amazonaws.com"
+                            },
+                            "Action": "s3:PutObject",
+                            "Resource": {"Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "EmailsBucket"}, "/*"]]}
+                        }
+                    ]
+                }
+            }
+        },
+        "DMARCRecord":
+        {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties":
+            {
+                "HostedZoneId": {"Fn::ImportValue": "HostedZoneId"},
+                "Name": {"Fn::Join": ["", ["_dmarc.", {"Fn::ImportValue": "DomainName"}, "."]]},
+                "Type": "TXT",
+                "TTL": 300,
+                "ResourceRecords": ["\"v=DMARC1; p=none;\""]
+            }
+        },
+        "MXRecord":
+        {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties":
+            {
+                "HostedZoneId": {"Fn::ImportValue": "HostedZoneId"},
+                "Name": {"Fn::ImportValue": "DomainName"},
+                "Type": "MX",
+                "TTL": 300,
+                "ResourceRecords": [{"Fn::Join": ["", ["10 inbound-smtp.", {"Ref": "AWS::Region"}, ".amazonaws.com"]]}]
+            }
+        },
+        "MXMailFromRecord":
+        {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties":
+            {
+                "HostedZoneId": {"Fn::ImportValue": "HostedZoneId"},
+                "Name": {"Fn::Join": ["", ["mail.", {"Fn::ImportValue": "DomainName"}]]},
+                "Type": "MX",
+                "TTL": 300,
+                "ResourceRecords": [{"Fn::Join": ["", ["10 feedback-smtp.", {"Ref": "AWS::Region"}, ".amazonses.com"]]}]
+            }
+        },
+        "TXTMailFromRecord":
+        {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties":
+            {
+                "HostedZoneId": {"Fn::ImportValue": "HostedZoneId"},
+                "Name": {"Fn::Join": ["", ["mail.", {"Fn::ImportValue": "DomainName"}]]},
+                "Type": "TXT",
+                "TTL": 300,
+                "ResourceRecords": ["\"v=spf1 include:amazonses.com ~all\""]
+            }
+        },
+        "DomainVerificationLambda":
+        {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": "DomainVerificationLogGroup",
+            "Properties":
+            {
+                "FunctionName": "DomainVerificationLambda",
+                "Runtime": "python3.12",
+                "Handler": "index.lambda_handler",
+                "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
+                "Timeout": 600,
+                "Code":
+                {
+                    "ZipFile":
+                    {
+                        "Fn::Join":
+                        [
+                            "\n",
+                            [
+                                "import time",
+                                "import json",
+                                "import boto3",
+                                "import cfnresponse",
+                                "",
+                                "def lambda_handler(event, context):",
+                                "    try:",
+                                "        ses_client = boto3.client('ses')",
+                                "        route53_client = boto3.client('route53')",
+                                "        if event['RequestType'] == 'Delete':",
+                                "            physical_resource_id = json.loads(event['PhysicalResourceId'])",
+                                "            ses_client.set_active_receipt_rule_set()  # disable the active rule set, which is needed for it to be deleted",
+                                "            for record_name in physical_resource_id:",
+                                "                records = route53_client.list_resource_record_sets(HostedZoneId=event['ResourceProperties']['hosted_zone_id'], StartRecordName=record_name, MaxItems='1')",
+                                "                if len(records['ResourceRecordSets']) > 0:",
+                                "                    record_to_delete = records['ResourceRecordSets'][0]",
+                                "                    route53_client.change_resource_record_sets(HostedZoneId=event['ResourceProperties']['hosted_zone_id'], ChangeBatch={'Comment': 'Adding CNAME record for SES DKIM configuration', 'Changes': [{'Action': 'DELETE', 'ResourceRecordSet': {'Name': record_to_delete['Name'], 'Type': record_to_delete['Type'], 'TTL': record_to_delete['TTL'], 'ResourceRecords': record_to_delete['ResourceRecords']}}]})",
+                                "            cfnresponse.send(event, context, cfnresponse.SUCCESS, {})",
+                                "            return",
+                                "        record_names = []",
+                                "        domain_name = event['ResourceProperties']['domain_name']",
+                                "        rule_set_name = event['ResourceProperties']['rule_set_name']",
+                                "        response = ses_client.verify_domain_identity(Domain=domain_name)",
+                                "        verification_token = response['VerificationToken']",
+                                "        response = ses_client.verify_domain_dkim(Domain=domain_name)",
+                                "        dkim_tokens = response['DkimTokens']",
+                                "        record_name = f'_amazonses.{domain_name}.'",
+                                "        record_names.append(record_name)",
+                                "        route53_client.change_resource_record_sets(HostedZoneId=event['ResourceProperties']['hosted_zone_id'], ChangeBatch={'Comment': 'Adding TXT record for SES domain ownership verification', 'Changes': [{'Action': 'UPSERT', 'ResourceRecordSet': {'Name': record_name, 'Type': 'TXT', 'TTL': 300, 'ResourceRecords': [{'Value': f'\"{verification_token}\"'}]}}]})",
+                                "        for token in dkim_tokens:",
+                                "            record_name = f'{token}._domainkey.{domain_name}.'",
+                                "            record_names.append(record_name)",
+                                "            route53_client.change_resource_record_sets(HostedZoneId=event['ResourceProperties']['hosted_zone_id'], ChangeBatch={'Comment': 'Adding CNAME record for SES DKIM configuration', 'Changes': [{'Action': 'UPSERT', 'ResourceRecordSet': {'Name': record_name, 'Type': 'CNAME', 'TTL': 300, 'ResourceRecords': [{'Value': f'{token}.dkim.amazonses.com'}]}}]})",
+                                "        done = False",
+                                "        retries = 0",
+                                "        while not done:",
+                                "            identities = ses_client.list_identities(IdentityType='Domain')['Identities']",
+                                "            for identity in identities:",
+                                "                if identity == domain_name:",
+                                "                    verification_attributes = ses_client.get_identity_verification_attributes(Identities=[domain_name])",
+                                "                    identity_status = verification_attributes['VerificationAttributes'][domain_name]['VerificationStatus']",
+                                "                    print(f'{identity} verification status = {identity_status}')",
+                                "                    done = (identity_status == 'Success')",
+                                "            if not done:",
+                                "                retries += 1",
+                                "                time.sleep(10)",
+                                "                if retries >= 30:",
+                                "                    cfnresponse.send(event, context, cfnresponse.FAILED, {'reason': 'max retries exceeded'})",
+                                "                    return",
+                                "        ses_client.set_active_receipt_rule_set(RuleSetName=rule_set_name)",
+                                "        ses_client.set_identity_mail_from_domain(Identity=domain_name, MailFromDomain='mail.'+domain_name)",
+                                "        physical_resource_id = json.dumps(record_names)",
+                                "        cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physical_resource_id)",
+                                "    except Exception as e:",
+                                "        print(e)",
+                                "        cfnresponse.send(event, context, cfnresponse.FAILED, {type(e).__name__: str(e)})"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "InvokeDomainVerificationLambda":
+        {
+            "Type": "Custom::DomainVerification",
+            "Properties":
+            {
+                "ServiceToken": {"Fn::GetAtt": ["DomainVerificationLambda", "Arn"]},
+                "domain_name": {"Fn::ImportValue": "DomainName"},
+                "hosted_zone_id": {"Fn::ImportValue": "HostedZoneId"},
+                "rule_set_name": {"Ref": "SESMailReceiptRuleSet"}
+            }
+        },
+        "LambdaExecutionRole":
+        {
+            "Type": "AWS::IAM::Role",
+            "Properties":
+            {
+                "AssumeRolePolicyDocument":
+                {
+                    "Version": "2012-10-17",
+                    "Statement":
+                    [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies":
+                [
+                    {
+                        "PolicyName": "LambdaSESVerifyPolicy",
+                        "PolicyDocument":
+                        {
+                            "Version": "2012-10-17",
+                            "Statement":
+                            [
+                                {
+                                "Effect": "Allow",
+                                "Action": [
+                                    "logs:*",
+                                    "ses:VerifyDomainIdentity",
+                                    "ses:VerifyDomainDkim",
+                                    "ses:ListIdentities",
+                                    "ses:GetIdentityVerificationAttributes",
+                                    "ses:SetActiveReceiptRuleSet",
+                                    "ses:SetIdentityMailFromDomain",
+                                    "route53:ChangeResourceRecordSets",
+                                    "route53:ListResourceRecordSets"
+                                ],
+                                "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "DomainVerificationLogGroup":
+        {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties":
+            {
+                "LogGroupName": "/aws/lambda/DomainVerificationLambda",
+                "RetentionInDays": 30
+            }
+        },
+        "SESBounceAndComplaintSNSTopic":
+        {
+            "Type": "AWS::SNS::Topic",
+            "Properties":
+            {
+                "TopicName": "SESBounceAndComplaintTopic"
+            }
+        },
+        "SESBounceComplaintSNSTopicPolicy":
+        {
+            "Type": "AWS::SNS::TopicPolicy",
+            "Properties": {
+                "Topics": [{"Ref": "SESBounceAndComplaintSNSTopic"}],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ses.amazonaws.com"
+                            },
+                            "Action": "SNS:Publish",
+                            "Resource": {"Ref": "SESBounceAndComplaintSNSTopic"}
+                        }
+                    ]
+                }
+            }
+        },
+        "SESConfigurationSet":
+        {
+            "Type": "AWS::SES::ConfigurationSet",
+            "Properties": {"Name": "SESConfigSet"}
+        },
+        "SESConfigurationSetEventDestination":
+        {
+            "Type": "AWS::SES::ConfigurationSetEventDestination",
+            "Properties":
+            {
+                "ConfigurationSetName": {"Ref": "SESConfigurationSet"},
+                "EventDestination":
+                {
+                    "Name": "BounceAndComplaintNotifications",
+                    "Enabled": true,
+                    "MatchingEventTypes": ["bounce", "complaint"],
+                    "SnsDestination":
+                    {
+                        "TopicARN": { "Ref": "SESBounceAndComplaintSNSTopic" }
+                    }
+                }
+            }
+        },
+        "DomainSNSTopicSubscription":
+        {
+            "Type": "AWS::SNS::Subscription",
+            "Properties":
+            {
+                "TopicArn": {"Ref": "SESBounceAndComplaintSNSTopic"},
+                "Protocol": "https",
+                "Endpoint": {"Fn::Join": ["", ["https://api.", {"Fn::ImportValue": "DomainName"}, "/mail-bounce-or-complaint/"]]}
+            }
+        }
+    }
+}

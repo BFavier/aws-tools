@@ -1,0 +1,566 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Defines the webapp resources",
+    "Parameters": {
+        "DockerImageURI":
+        {
+            "Type": "String",
+            "Default": "717279735548.dkr.ecr.eu-west-3.amazonaws.com/project/webapp:latest",
+            "Description": "The URI of the ECR image to use"
+        },
+        "InstanceType":
+        {
+            "Type": "String",
+            "Description": "Instance Type",
+            "Default": "t2.micro",
+            "AllowedValues": ["t2.micro"],
+            "ConstraintDescription": "Must be one of the valid instance specified in the stack parameters"
+        },
+        "cpuUnits":
+        {
+            "Type": "Number",
+            "Description": "CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)",
+            "Default": 512
+        },
+        "memoryMb":
+        {
+            "Type": "Number",
+            "Description": "Memory resources allocated to each docker container running the service (in MB)",
+            "Default": 512
+        },
+        "InitialInstanceCount":
+        {
+            "Type": "Number",
+            "Description": "Initial number of instances to boot up at stack deployment",
+            "Default": 1
+        },
+        "MinInstanceCount":
+        {
+            "Type": "Number",
+            "Description": "Minimum number of instances that must booted up by the scaling policy",
+            "Default": 1
+        },
+        "MaxInstanceCount":
+        {
+            "Type": "Number",
+            "Description": "Maximum number of instances that can be booted up by the scaling policy",
+            "Default": 3
+        },
+        "InstanceScalingCooldown":
+        {
+            "Type": "Number",
+            "Description": "Number of seconds between an upward or a downward instances scaling adjustment",
+            "Default": 300
+        },
+        "SSHKeyName":
+        {
+            "Type": "String",
+            "Description": "The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.",
+            "Default": "benoit-favier-desktop"
+        }
+    },
+    "Resources" :
+    {
+        "WebappLoadBalancer":
+        {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Name": {"Fn::Sub": "WebappLoadBalancer"},
+                "Subnets": [
+                    {"Fn::ImportValue": "PublicSubnetAId"},
+                    {"Fn::ImportValue": "PublicSubnetBId"},
+                    {"Fn::ImportValue": "PublicSubnetCId"}
+                ],
+                "SecurityGroups": [
+                    {
+                        "Ref": "LoadBalancerSecurityGroup"
+                    }
+                ],
+                "Scheme": "internet-facing",
+                "LoadBalancerAttributes": [
+                    {
+                        "Key": "idle_timeout.timeout_seconds",
+                        "Value": "60"
+                    }
+                ],
+                "Type": "application"
+            }
+        },
+        "WebappTargetGroup":
+        {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties":
+            {
+                "Name": "WebappTargetGroup",
+                "VpcId": {"Fn::ImportValue": "PublicVpcId"},
+                "Port": 80,
+                "Protocol": "HTTP",
+                "TargetType": "instance",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckPort": "traffic-port",
+                "HealthCheckPath": "/",
+                "HealthCheckIntervalSeconds": 30,
+                "HealthCheckTimeoutSeconds": 5,
+                "HealthyThresholdCount": 5,
+                "UnhealthyThresholdCount": 2,
+                "Matcher": {"HttpCode": "200"}
+            }
+        },
+        "WebappListener":
+        {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties":
+            {
+                "DefaultActions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {"Ref": "WebappTargetGroup"}
+                    }
+                ],
+                "LoadBalancerArn": {"Ref": "WebappLoadBalancer"},
+                "Port": 443,
+                "Protocol": "HTTPS",
+                "SslPolicy": "ELBSecurityPolicy-2016-08",
+                "Certificates": [
+                    {
+                        "CertificateArn": {"Fn::ImportValue": "CertificateArn"}
+                    }
+                ]
+            }
+        },
+        "WebappListenerRule":
+        {
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+            "Properties": {
+                "Actions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "WebappTargetGroup"
+                        }
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "HostHeaderConfig":
+                        {
+                            "Values":
+                            [
+                                {"Fn::Join": ["", ["www.", {"Fn::ImportValue": "DomainName"}]]}
+                            ]
+                        }
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "WebappListener"
+                },
+                "Priority": 1
+            }
+        },
+        "WebappCluster":
+        {
+            "Type": "AWS::ECS::Cluster",
+            "Properties":
+            {
+                "ClusterName": {"Fn::Sub": "WebappCluster"}
+            }
+        },
+        "LoadBalancerSecurityGroup":
+        {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties":
+                {
+                    "GroupDescription": "Security group for Application Load Balancer",
+                    "VpcId": {"Fn::ImportValue": "PublicVpcId"},
+                    "SecurityGroupIngress": [
+                        {
+                            "IpProtocol": "tcp",
+                            "FromPort": 80,
+                            "ToPort": 80,
+                            "CidrIp": "0.0.0.0/0"
+                        },
+                        {
+                            "IpProtocol": "tcp",
+                            "FromPort": 443,
+                            "ToPort": 443,
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "SecurityGroupEgress": [
+                        {
+                            "IpProtocol": "-1",
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ]
+                }
+        },
+        "WebappRunnerSecurityGroup":
+        {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties":
+                {
+                    "GroupDescription": "Security group for runners",
+                    "VpcId": {"Fn::ImportValue": "PublicVpcId"},
+                    "SecurityGroupIngress":
+                    [
+                        {
+                            "Fn::If":
+                            [
+                                "HasSSHKeyName",
+                                {
+                                    "IpProtocol": "tcp",
+                                    "FromPort": 22,
+                                    "ToPort": 22,
+                                    "CidrIp": "0.0.0.0/0"
+                                },
+                                {"Ref": "AWS::NoValue"}
+                            ]
+                        },
+                        {
+                            "IpProtocol": "tcp",
+                            "FromPort": 80,
+                            "ToPort": 80,
+                            "CidrIp": "0.0.0.0/0"
+                        },
+                        {
+                            "IpProtocol": "tcp",
+                            "FromPort": 443,
+                            "ToPort": 443,
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "SecurityGroupEgress":
+                    [
+                        {
+                            "IpProtocol": "-1",
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ]
+                }
+        },
+        "WebappLaunchConfiguration":
+        {
+            "Type": "AWS::AutoScaling::LaunchConfiguration",
+            "DependsOn": "WebappCluster",
+            "Properties":
+            {
+                "ImageId": {"Fn::Sub": "{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id}}"},
+                "InstanceType": {"Ref": "InstanceType"},
+                "KeyName": {"Fn::If": ["HasSSHKeyName", {"Ref": "SSHKeyName"}, {"Ref": "AWS::NoValue"}]},
+                "SecurityGroups": [
+                    {"Ref": "WebappRunnerSecurityGroup"}
+                ],
+                "IamInstanceProfile": {"Ref": "WebappECSInstanceProfile"},
+                "UserData": {
+                    "Fn::Base64": {"Fn::Sub": "#!/bin/bash\necho ECS_CLUSTER=${WebappCluster} >> /etc/ecs/ecs.config"}
+                }
+            }
+        },
+        "WebappAutoScalingGroup":
+        {
+            "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "LaunchConfigurationName": {
+                    "Ref": "WebappLaunchConfiguration"
+                },
+                "MinSize": {"Ref": "MinInstanceCount"},
+                "MaxSize": {"Ref": "MaxInstanceCount"},
+                "DesiredCapacity": {"Ref": "InitialInstanceCount"},
+                "VPCZoneIdentifier": [
+                    {"Fn::ImportValue": "PublicSubnetAId"},
+                    {"Fn::ImportValue": "PublicSubnetBId"},
+                    {"Fn::ImportValue": "PublicSubnetCId"}
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {"Fn::Sub": "WebappInstance"},
+                        "PropagateAtLaunch": true
+                    }
+                ]
+            }
+        },
+        "WebappCPUAlarmHigh":
+        {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties":
+            {
+            "AlarmName": {"Fn::Sub": "WebappHighCPU"},
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Statistic": "Average",
+            "Period": "300",
+            "EvaluationPeriods": "1",
+            "Threshold": "70",
+            "ComparisonOperator": "GreaterThanThreshold",
+            "Dimensions": [
+                {
+                    "Name": "AutoScalingGroupName",
+                    "Value": {"Ref": "WebappAutoScalingGroup"}
+                }
+            ],
+            "AlarmActions": [{"Ref": "WebappScaleUpPolicy"}]
+            }
+        },
+        "WebappScaleUpPolicy":
+        {
+            "Type": "AWS::AutoScaling::ScalingPolicy",
+            "Properties": {
+                "PolicyName": {"Fn::Sub": "WebappScaleUpPolicy"},
+                "PolicyType": "SimpleScaling",
+                "ScalingAdjustment": 1,
+                "AdjustmentType": "ChangeInCapacity",
+                "AutoScalingGroupName": {"Ref": "WebappAutoScalingGroup"},
+                "Cooldown": {"Ref": "InstanceScalingCooldown"}
+            }
+        },
+        "WebappCPUAlarmLow":
+        {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties": {
+            "AlarmName": {
+                "Fn::Sub": "WebappLowCPU"
+            },
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Statistic": "Average",
+            "Period": "300",
+            "EvaluationPeriods": "1",
+            "Threshold": "20",
+            "ComparisonOperator": "LessThanThreshold",
+            "Dimensions": [
+                {
+                "Name": "AutoScalingGroupName",
+                "Value": {
+                    "Ref": "WebappAutoScalingGroup"
+                }
+                }
+            ],
+            "AlarmActions": [
+                {
+                "Ref": "WebappScaleDownPolicy"
+                }
+            ]
+            }
+        },
+        "WebappScaleDownPolicy":
+        {
+            "Type": "AWS::AutoScaling::ScalingPolicy",
+            "Properties": {
+            "AutoScalingGroupName": {
+                "Ref": "WebappAutoScalingGroup"
+            },
+            "PolicyName": {
+                "Fn::Sub": "WebappScaleDownPolicy"
+            },
+            "PolicyType": "SimpleScaling",
+            "ScalingAdjustment": "-1",
+            "AdjustmentType": "ChangeInCapacity",
+            "Cooldown": {"Ref": "InstanceScalingCooldown"}
+            }
+        },
+        "WebappTaskDefinition":
+        {
+            "Type": "AWS::ECS::TaskDefinition",
+            "Properties":
+            {
+                "Family": "WebappTaskFamily",
+                "ContainerDefinitions": [
+                    {
+                        "Name": {"Fn::Sub": "WebappTaskContainer"},
+                        "Image": {"Ref": "DockerImageURI"},
+                        "Environment":
+                        [
+                            {"Name": "AWS_DEFAULT_REGION", "Value": {"Ref": "AWS::Region"}},
+                            {"Name": "COGNITO_USER_POOL_ID", "Value": {"Fn::ImportValue": "CognitoUserPoolId"}},
+                            {"Name": "COGNITO_USER_POOL_CLIENT_ID", "Value": {"Fn::ImportValue": "CognitoUserPoolClientId"}},
+                            {"Name": "DOMAIN_NAME", "Value": {"Fn::ImportValue": "DomainName"}}
+                        ],
+                        "Cpu": {"Ref": "cpuUnits"},
+                        "Memory": {"Ref": "memoryMb"},
+                        "Essential": true,
+                        "PortMappings": [
+                            {"ContainerPort": 80}
+                        ],
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options": {
+                                "awslogs-group": {"Ref": "WebappECSLogGroup"},
+                                "awslogs-region": {"Ref": "AWS::Region"},
+                                "awslogs-stream-prefix": {"Fn::Sub": "WebappTaskContainer"}
+                            }
+                        }
+                    }
+                ],
+                "RequiresCompatibilities": ["EC2"],
+                "NetworkMode": "host",
+                "TaskRoleArn": {"Ref": "WebappRunnerRole"},
+                "ExecutionRoleArn": {"Ref": "WebappExecutionRole"}
+            }
+        },
+        "WebappService":
+        {
+            "Type": "AWS::ECS::Service",
+            "DependsOn": "WebappListener",
+            "Properties":
+            {
+                "Cluster": {"Ref": "WebappCluster"},
+                "DesiredCount": 1,
+                "TaskDefinition": {"Ref": "WebappTaskDefinition"},
+                "LaunchType": "EC2",
+                "LoadBalancers": [
+                    {
+                        "ContainerName": {"Fn::Sub": "WebappTaskContainer"},
+                        "ContainerPort": 80,
+                        "TargetGroupArn": {"Ref": "WebappTargetGroup"}
+                    }
+                ]
+            }
+        },
+        "WebappECSLogGroup":
+        {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties":
+            {
+                "LogGroupName": {"Fn::Sub": "/ecs/webapp"},
+                "RetentionInDays": 30
+            }
+        },
+        "WebappRunnerRole":
+        {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                            "Action": "sts:AssumeRole"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "ec2.amazonaws.com"},
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": {"Fn::Sub": "WebappEcsTaskExecutionPolicy"},
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents",
+                                        "ecr:GetAuthorizationToken",
+                                        "ecr:BatchCheckLayerAvailability",
+                                        "ecr:GetDownloadUrlForLayer",
+                                        "ecr:BatchGetImage",
+                                        "s3:*",
+                                        "cognito:*",
+                                        "dynamodb:*",
+                                        "ecs:RunTask",
+                                        "sns:Publish",
+                                        "ses:SendEmail",
+                                        "ses:SendRawEmail",
+                                        "cloudformation:ListStacks",
+                                        "cloudformation:DescribeStacks"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "WebappExecutionRole":
+        {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument":
+                {
+                    "Version": "2012-10-17",
+                    "Statement":
+                    [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                            "Action": "sts:AssumeRole"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "ec2.amazonaws.com"},
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies":
+                [
+                    {
+                        "PolicyName": {"Fn::Sub": "ExecutionRole"},
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ecs:DeregisterContainerInstance",
+                                        "ecs:DiscoverPollEndpoint",
+                                        "ecs:Poll",
+                                        "ecs:RegisterContainerInstance",
+                                        "ecs:StartTelemetrySession",
+                                        "ecs:UpdateContainerInstancesState",
+                                        "ecs:Submit*",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents",
+                                        "ec2:DescribeTags",
+                                        "ec2:DescribeInstances",
+                                        "elasticloadbalancing:*",
+                                        "ecr:GetAuthorizationToken",
+                                        "ecr:BatchCheckLayerAvailability",
+                                        "ecr:GetDownloadUrlForLayer",
+                                        "ecr:BatchGetImage"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "WebappECSInstanceProfile":
+        {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Roles": [
+                    {"Ref": "WebappExecutionRole"}
+                ]
+            }
+        },
+        "WebappCNAMERecord": {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties": {
+                "HostedZoneName": {"Fn::Join": ["", [{"Fn::ImportValue": "DomainName"}, "."]]},
+                "Name": {"Fn::Join": ["", ["www.", {"Fn::ImportValue": "DomainName"}]]},
+                "Type": "CNAME",
+                "TTL": "300",
+                "ResourceRecords": [{"Fn::GetAtt": ["WebappLoadBalancer", "DNSName"]}]
+            }
+        }
+    },
+    "Conditions":
+    {
+        "HasSSHKeyName":
+        {
+            "Fn::Not": [{"Fn::Equals": ["", {"Ref": "SSHKeyName"}]}]
+        }
+    }
+}
