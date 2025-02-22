@@ -3,32 +3,37 @@
     "Description" : "Defines the databases resources",
     "Parameters":
     {
+        "TableName":
+        {
+            "Type": "String",
+            "Description": "The name of the DynamoDB table"
+        }
     },
     "Resources" :
     {
-        "GeographyDatabaseTable":
+        "Table":
         {
             "Type": "AWS::DynamoDB::Table",
             "Properties":
             {
-                "TableName": "geography_database",
+                "TableName": {"Ref": "TableName"},
                 "AttributeDefinitions": [
                     {
-                        "AttributeName": "category",
+                        "AttributeName": "item_id",
                         "AttributeType": "S"
                     },
                     {
-                        "AttributeName": "value",
+                        "AttributeName": "timestamp",
                         "AttributeType": "S"
                     }
                 ],
                 "KeySchema": [
                     {
-                        "AttributeName": "category",
+                        "AttributeName": "item_id",
                         "KeyType": "HASH"
                     },
                     {
-                        "AttributeName": "value",
+                        "AttributeName": "timestamp",
                         "KeyType": "RANGE"
                     }
                 ],
