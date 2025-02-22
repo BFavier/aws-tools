@@ -258,9 +258,11 @@ def query_items(table: object,
                 ascending: bool=True,
                 conditions: ConditionBase | None = None,
                 subset: list[str] | None = None,
-                limit: int | None = None) -> Iterable[dict]:
+                page_size: int | None = 1_000,
+                page_start_token: str | None = None) -> tuple[list[dict], str | None]:
     """
-    Query items that match the hash key and/or the sort key
+    Query items that match the hash key and/or the sort key.
+    Return items in a paginated way.
 
     Params
     ------
@@ -276,21 +278,33 @@ def query_items(table: object,
         Otherwise it has no effect.
     conditions : ConditionBase
         the conditions on which returned items are filtered
-    subset : list of str
-        the list of field subset to return to avoid returning the full object
-    limit : int or None
-        maximum number of items returned
-    
+    subset : list of str or None
+        the subset of fields to return, when fields are not all usefull, to avoid returning the full object
+        (dynamoDB is billed by the byte)
+    page_size : int or None
+        Maximum number of items returned in a single page.
+        The number of items per page might be less than that,
+        despite not all items beeing returned,
+        if some filters (conditions) are applied.
+    next_page_token : str or None
+        If None, start the query from the beginning.
+        If provided, resume the query from the last page.
+        Must be a token returned by a call of this function on the same table,
+        with the same parameters.
+
     Returns
     -------
-    Iterable of dict :
-        the matching items are yielded
+    tuple :
+        the (results, next_page_token) tuple, where results is a list of dict items,
+        and 'next_page_token' must be passed as 'page_start_token' argument in the next call to resume the query (if it is not None).
 
     Example
     -------
     >>> from boto3.dynamodb.conditions import Attr
     >>> put_item(table, {"uuid": "ID0", "field": 10.0})
-    >>> for item in query_items(table, hash_key="ID0", conditions=Attr("field").eq(10.0)):
+    >>> next_page_token = None
+    >>> while True:
+    >>>     items, next_page_token = query_items(table, hash_key="ID0", conditions=Attr("field").eq(10.0), page_start_token=next_page_token):
     >>>     print(item)
     {"uuid": "ID0", "field": 10.0}
     """
@@ -311,28 +325,22 @@ def query_items(table: object,
         key_conditions = None
     else:
         key_conditions = hash_condition & sort_condition
-    # loop on all pages of results
-    response = None
-    while True:
-        if key_conditions is not None:
-            response = table.query(
-                KeyConditionExpression=key_conditions,
-                ScanIndexForward=ascending,
-                **(dict(FilterExpression=conditions) if conditions is not None else dict()),
-                **(dict(ExclusiveStartKey=response['LastEvaluatedKey']) if response else dict()),
-                **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
-                **(dict(Limit=limit) if limit is not None else dict())
-            )
-        else:
-            response = table.scan(
-                **(dict(FilterExpression=conditions) if conditions is not None else dict()),
-                **(dict(ExclusiveStartKey=response['LastEvaluatedKey']) if response else dict()),
-                **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
-                **(dict(Limit=limit) if limit is not None else dict())
-            )
-        yield from (_recursive_convert(item, float) for item in response.get("Items", []))
-        if 'LastEvaluatedKey' not in response:
-            break
+    # get a single page of results
+    kwargs = {
+        **(dict(FilterExpression=conditions) if conditions is not None else dict()),
+        **(dict(ExclusiveStartKey=page_start_token) if page_start_token is not None else dict()),
+        **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
+        **(dict(Limit=page_size) if page_size is not None else dict())
+    }
+    if key_conditions is not None:
+        response = table.query(
+            KeyConditionExpression=key_conditions,
+            ScanIndexForward=ascending,
+            **kwargs
+        )
+    else:
+        response = table.scan(**kwargs)
+    return ([_recursive_convert(item, float) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
 def get_item_field(table: object, key: KeyType, field: str) -> dict | None:
