@@ -160,16 +160,17 @@ def item_exists(table: object, key: KeyType) -> bool:
     return "Item" in response
 
 
-def get_item(table: object, key: KeyType) -> dict | None:
+def get_item(table: object, keys: KeyType) -> dict | None:
     """
-    Get a full item from it's key, returns None if the key does not exist.
+    Get a full item from it's keys, returns None if the key does not exist.
+    If the table has an hash key and a range key, both must be provided in the 'keys' dict.
 
     Example
     -------
     >>> get_item(table, {"id": "ID0"})
     {"uuid": "ID0", "field": 10.0}
     """
-    response = table.get_item(Key=key)
+    response = table.get_item(Key=keys)
     return _recursive_convert(response.get("Item"), float)
 
 
@@ -254,7 +255,8 @@ def batch_delete_items(table: object, keys_or_items: list[KeyType | dict]) -> in
 
 def query_items(table: object,
                 hash_key: object | None = None,
-                sort_key: tuple[object, object] | object | None = None,
+                sort_key_interval: tuple[object | None, object | None] = (None, None),
+                sort_key_interval_excluding: tuple[bool, bool] = (False, True),
                 ascending: bool=True,
                 conditions: ConditionBase | None = None,
                 subset: list[str] | None = None,
@@ -270,12 +272,13 @@ def query_items(table: object,
         The dynamodb Table object
     hash_key : object or None
         the value of the hash_key for returned items, or None
-    sort_key : (object, object) or object or None
-        the interval of valid values for the sort key, or the value, or None
+    sort_key_interval : tuple of two objects
+        the (from, to) interval for the sort key, a None means an unbounded side of the interval
+    sort_key_interval_excluding : tuple of two bools
+        wether the interval is excluding or not on each side
     ascending : bool
-        If one of 'hash_key' or 'sort_key' is provided, this argument defines the
-        sort_key order in which results are returned (ascending or descending).
-        Otherwise it has no effect.
+        If one of 'hash_key' or 'sort_key' is provided, the results are returned by ascending (or descending) order of 'sort_key'.
+        Otherwise it has no effect, as the full scan is not ordered.
     conditions : ConditionBase
         the conditions on which returned items are filtered
     subset : list of str or None
@@ -283,9 +286,7 @@ def query_items(table: object,
         (dynamoDB is billed by the byte)
     page_size : int or None
         Maximum number of items returned in a single page.
-        The number of items per page might be less than that,
-        despite not all items beeing returned,
-        if some filters (conditions) are applied.
+        The number of items per page might be less than that if some filters ('conditions' argument) are applied.
     next_page_token : str or None
         If None, start the query from the beginning.
         If provided, resume the query from the last page.
@@ -310,21 +311,17 @@ def query_items(table: object,
     """
     # build key conditions if any
     table_keys = get_table_keys(table)
-    hash_condition = Key(table_keys["HASH"]).eq(hash_key)
-    if isinstance(sort_key, tuple) or isinstance(sort_key, list):
-        sort_key_start, sort_key_end = sort_key
-        sort_condition = Key(table_keys["RANGE"]).between(sort_key_start, sort_key_end)
-    elif sort_key is not None:
-        sort_condition = Key(table_keys["RANGE"]).eq(sort_key)
-    # combine hash and sort key conditions
-    if sort_key is None and hash_key is not None:
-        key_conditions = hash_condition
-    elif hash_key is None and sort_key is not None:
-        key_conditions = sort_condition
-    elif hash_key is None and sort_key is None:
-        key_conditions = None
-    else:
-        key_conditions = hash_condition & sort_condition
+    sort_key_start, sort_key_end = sort_key_interval
+    start_excluded, end_excluded = sort_key_interval_excluding
+    keys = Key(table_keys["HASH"]).eq(hash_key) if hash_key is not None else None
+    if (sort_key_start is not None) or (sort_key_end is not None):
+        sort_key = Key(table_keys["RANGE"])
+        if sort_key_start is not None:
+            sort_condition = sort_key.gt(sort_key_start) if start_excluded else sort_key.gte(sort_key_start)
+            keys = (keys & sort_condition) if keys is not None else sort_condition
+        if sort_key_end is not None:
+            sort_condition = sort_key.lt(sort_key_end) if end_excluded else sort_key.lte(sort_key_end)
+            keys = (keys & sort_condition) if keys is not None else sort_condition
     # get a single page of results
     kwargs = {
         **(dict(FilterExpression=conditions) if conditions is not None else dict()),
@@ -332,9 +329,9 @@ def query_items(table: object,
         **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
         **(dict(Limit=page_size) if page_size is not None else dict())
     }
-    if key_conditions is not None:
+    if keys is not None:
         response = table.query(
-            KeyConditionExpression=key_conditions,
+            KeyConditionExpression=keys,
             ScanIndexForward=ascending,
             **kwargs
         )
