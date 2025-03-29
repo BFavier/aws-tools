@@ -21,12 +21,14 @@ def list_stacks() -> list[str]:
     return stack_names
 
 
-def get_stack_outputs(stacks: list[str]|None = None) -> dict:
+def get_stack_outputs(stack: str|None = None) -> dict:
     """
     Returns the exported stack outputs
     """
-    if stacks is None:
+    if stack is None:
         stacks = list_stacks()
+    else:
+        stacks = [stack]
     stack_outputs = {}
     for stack_name in stacks:
         stack = cloud_formation.describe_stacks(StackName=stack_name)['Stacks'][0]
