@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aws-tools"
+dynamic = ["version"]
+requires-python = ">= 3.12"
+dependencies = [
+  "boto3==1.35.10"
+]
+description = "Various wrapper functions around aws boto3 API"
+
+[tool.setuptools]
+packages = [
+  "aws_tools"
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "aws_tools.__version__"}
