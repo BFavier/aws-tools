@@ -415,7 +415,7 @@ def remove_item_field(table: object, key: KeyType, field: str, return_object: bo
     return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
 
 
-def increment_item_field(
+def increment_item_field_or_create(
         table: object,
         key: KeyType,
         field: str,
@@ -425,11 +425,12 @@ def increment_item_field(
     """
     Increment the field of an item at given key.
     Increments from the 'default' value if the field did not exist in the item.
+    The item is created if it did not exists before.
 
     Example
     -------
-    >>> increment_item_field(table, {"id": "ID0"}, "value", -2.5)
-    >>> increment_item_field(table, {"id": "ID0"}, "value", 8, return_object=True)
+    >>> increment_item_field_or_create(table, {"id": "ID0"}, "value", -2.5)
+    >>> increment_item_field_or_create(table, {"id": "ID0"}, "value", 8, return_object=True)
     3.0
     """
     response = table.update_item(

@@ -4,7 +4,7 @@ from aws_tools.dynamoDB import list_tables, get_table, table_exists, create_tabl
 from aws_tools.dynamoDB import item_exists, get_item, put_item, batch_put_items, delete_item, batch_delete_items
 from aws_tools.dynamoDB import query_items, Attr
 from aws_tools.dynamoDB import (get_item_field, put_item_field, remove_item_field,
-                                   increment_item_field, extend_array_item_field,
+                                   increment_item_field_or_create, extend_array_item_field,
                                    insert_in_set_item_field, remove_from_set_item_field)
 
 
@@ -98,7 +98,7 @@ def check_item_field(table: object, item_id: str):
     with check_fail():
         remove_item_field(table, missing_id, "field")
     with check_fail():
-        increment_item_field(table, missing_id, "field", 0.)
+        increment_item_field_or_create(table, missing_id, "field", 0.)
     with check_fail():
         extend_array_item_field(table, missing_id, "array_field", [0.])
     with check_fail():
@@ -136,8 +136,8 @@ def check_item_field(table: object, item_id: str):
     with check_fail():
         put_item_field(table, item_id, "other_missing_field.missing_nested", 4)
     # append and increment functions work
-    assert increment_item_field(table, item_id, "another_missing_field", 1, return_object=True) == 1
-    assert increment_item_field(table, item_id, "field", 2.0, return_object=True) == 1.0
+    assert increment_item_field_or_create(table, item_id, "another_missing_field", 1, return_object=True) == 1
+    assert increment_item_field_or_create(table, item_id, "field", 2.0, return_object=True) == 1.0
     assert extend_array_item_field(table, item_id, "array_field", [None, "abcd"], return_object=True) == [{"nested": 3.5}, None, "abcd"]
     # you can delete a single nested path or a full field at once
     assert remove_item_field(table, item_id, "array_field[0].nested", return_object=True) == 3.5
