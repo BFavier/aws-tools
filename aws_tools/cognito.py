@@ -164,6 +164,7 @@ def admin_sign_up(user_pool: str, user: str, password: str, attributes: dict={})
         Password=password,
         Permanent=True
     )
+    admin_enable_disable_account(user_pool, user, enabled=True)
 
 
 def admin_resend_account_confirmation_email(pool_client: str, user: str):
@@ -187,18 +188,14 @@ def admin_confirm_status(user_pool: str, user: str):
     )
 
 
-def admin_disable_account(user_pool: str, user: str):
+def admin_enable_disable_account(user_pool: str, user: str, enabled: bool):
     """
     Disable an account
     """
-    cognito.admin_disable_user(UserPoolId=user_pool, Username=user)
-
-
-def admin_reenable_account(user_pool: str, user: str):
-    """
-    Disable an account
-    """
-    cognito.admin_disable_user(UserPoolId=user_pool, Username=user)
+    if enabled:
+        cognito.admin_enable_user(UserPoolId=user_pool, Username=user)
+    else:
+        cognito.admin_disable_user(UserPoolId=user_pool, Username=user)
 
 
 def admin_delete_account(user_pool: str, user: str):
@@ -208,7 +205,7 @@ def admin_delete_account(user_pool: str, user: str):
     cognito.admin_delete_user(UserPoolId=user_pool, Username=user)
 
 
-def admin_reset_password(user_pool: str, user: str):
+def admin_resend_confirm_email(user_pool: str, user: str):
     """
     reset the password of an user, generates a new one he will receive by email
     """
