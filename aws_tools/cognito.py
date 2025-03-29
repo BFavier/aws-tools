@@ -1,4 +1,5 @@
 import boto3
+from botocore.exceptions import ClientError
 from typing import Literal
 
 cognito = boto3.client("cognito-idp")
@@ -119,11 +120,18 @@ def set_attribute(access_token: str, attributes: dict):
     )
 
 
-def admin_get_user_infos(user_pool: str, user: str) -> dict:
+def admin_get_user_infos(user_pool: str, user: str) -> dict | None:
     """
     returns all the attributes and more of an user
+    returns None if the user does not exist
     """
-    infos = cognito.admin_get_user(UserPoolId=user_pool, Username=user)
+    try:
+        infos = cognito.admin_get_user(UserPoolId=user_pool, Username=user)
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "UserNotFoundException":
+            return None
+        else:
+            raise e
     infos["UserAttributes"] = {d["Name"]: d["Value"] for d in infos["UserAttributes"]}
     return infos
 
