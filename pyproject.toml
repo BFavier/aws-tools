@@ -7,7 +7,7 @@ name = "aws-tools"
 dynamic = ["version"]
 requires-python = ">= 3.12"
 dependencies = [
-  "boto3==1.35.10"
+  "boto3 >= 1.35.10"
 ]
 description = "Various wrapper functions around aws boto3 API"
 
