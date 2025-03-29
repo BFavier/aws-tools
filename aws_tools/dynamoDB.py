@@ -415,30 +415,29 @@ def remove_item_field(table: object, key: KeyType, field: str, return_object: bo
     return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
 
 
-def increment_item_field(table: object, key: KeyType, field: str, delta: float, return_object: bool=False) -> dict | None:
+def increment_item_field(
+        table: object,
+        key: KeyType,
+        field: str,
+        delta: int | float,
+        default: int | float = 0,
+        return_object: bool=False) -> float | None:
     """
-    increment the field of an item at given key.
-    Raise an error if the item or field does not exist.
+    Increment the field of an item at given key.
+    Increments from the 'default' value if the field did not exist in the item.
 
     Example
     -------
     >>> increment_item_field(table, {"id": "ID0"}, "value", -2.5)
     >>> increment_item_field(table, {"id": "ID0"}, "value", 8, return_object=True)
-    3
+    3.0
     """
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"SET {field} = {field} + :increment_amount",
-            ExpressionAttributeValues={':increment_amount': _recursive_convert(delta, Decimal)},
-            ConditionExpression=f"attribute_exists({field})",  # only update if the field did exist
-            ReturnValues="UPDATED_NEW" if return_object else "NONE"  # Return the updated values after the increment
-            )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
-        else:
-            raise e
+    response = table.update_item(
+        Key=key,
+        UpdateExpression=f"SET {field} = if_not_exists({field}, :default) + :increment_amount",
+        ExpressionAttributeValues={":increment_amount": _recursive_convert(delta, Decimal), ":default": _recursive_convert(default, Decimal)},
+        ReturnValues="UPDATED_NEW" if return_object else "NONE"  # Return the updated values after the increment
+    )
     return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
 
 
