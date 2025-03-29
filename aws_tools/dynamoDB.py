@@ -256,7 +256,6 @@ def batch_delete_items(table: object, keys_or_items: list[KeyType | dict]) -> in
 def query_items(table: object,
                 hash_key: object | None = None,
                 sort_key_interval: tuple[object | None, object | None] = (None, None),
-                sort_key_interval_excluding: tuple[bool, bool] = (False, True),
                 ascending: bool=True,
                 conditions: ConditionBase | None = None,
                 subset: list[str] | None = None,
@@ -273,9 +272,7 @@ def query_items(table: object,
     hash_key : object or None
         the value of the hash_key for returned items, or None
     sort_key_interval : tuple of two objects
-        the (from, to) interval for the sort key, a None means an unbounded side of the interval
-    sort_key_interval_excluding : tuple of two bools
-        wether the interval is excluding or not on each side
+        the (from, to) interval (including boundary on both sides) for the sort key, a None means an unbounded side for the interval
     ascending : bool
         If one of 'hash_key' or 'sort_key' is provided, the results are returned by ascending (or descending) order of 'sort_key'.
         Otherwise it has no effect, as the full scan is not ordered.
@@ -312,16 +309,16 @@ def query_items(table: object,
     # build key conditions if any
     table_keys = get_table_keys(table)
     sort_key_start, sort_key_end = sort_key_interval
-    start_excluded, end_excluded = sort_key_interval_excluding
-    keys = Key(table_keys["HASH"]).eq(hash_key) if hash_key is not None else None
-    if (sort_key_start is not None) or (sort_key_end is not None):
+    key_conditions = Key(table_keys["HASH"]).eq(hash_key) if hash_key is not None else None
+    if any(k is not None for k in sort_key_interval): # Only a single condition by key is supported by boto3
         sort_key = Key(table_keys["RANGE"])
-        if sort_key_start is not None:
-            sort_condition = sort_key.gt(sort_key_start) if start_excluded else sort_key.gte(sort_key_start)
-            keys = (keys & sort_condition) if keys is not None else sort_condition
-        if sort_key_end is not None:
-            sort_condition = sort_key.lt(sort_key_end) if end_excluded else sort_key.lte(sort_key_end)
-            keys = (keys & sort_condition) if keys is not None else sort_condition
+        if (sort_key_start is not None) and (sort_key_end is not None):
+            sort_condition = sort_key.between(sort_key_start, sort_key_end)
+        elif sort_key_start is not None:
+            sort_condition = sort_key.gte(sort_key_start)
+        elif sort_key_end is not None:
+            sort_condition = sort_key.lte(sort_key_end)
+        key_conditions = (key_conditions & sort_condition) if key_conditions is not None else sort_condition
     # get a single page of results
     kwargs = {
         **(dict(FilterExpression=conditions) if conditions is not None else dict()),
@@ -329,9 +326,9 @@ def query_items(table: object,
         **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
         **(dict(Limit=page_size) if page_size is not None else dict())
     }
-    if keys is not None:
+    if key_conditions is not None:
         response = table.query(
-            KeyConditionExpression=keys,
+            KeyConditionExpression=key_conditions,
             ScanIndexForward=ascending,
             **kwargs
         )
