@@ -247,8 +247,63 @@ def batch_delete_items(table: object, keys_or_items: Iterable[dict]):
             batch.delete_item(Key={v: key[v] for v in table_keys.values()})
 
 
+def scan_items(
+        table: object,
+        conditions: ConditionBase | None = None,
+        subset: list[str] | None = None,
+        page_size: int | None = 1_000,
+        page_start_token: str | None = None
+    ) -> tuple[list[dict], str | None]:
+    """
+    Scan all items in the table.
+    Return items in a paginated way.
+
+    Params
+    ------
+    table : object
+        The dynamodb Table object
+    conditions : ConditionBase
+        the conditions on which returned items are filtered
+    subset : list of str or None
+        the subset of fields to return, when fields are not all usefull, to avoid returning the full object
+        (dynamoDB is billed by the byte)
+    page_size : int or None
+        Maximum number of items returned in a single page.
+        The number of items per page might be less than that if some filters ('conditions' argument) are applied.
+    next_page_token : str or None
+        If None, start the query from the beginning.
+        If provided, resume the query from the last page.
+        Must be a token returned by a call of this function on the same table,
+        with the same parameters.
+
+    Returns
+    -------
+    tuple :
+        the (results, next_page_token) tuple, where results is a list of dict items,
+        and 'next_page_token' must be passed as 'page_start_token' argument in the next call to resume the query (if it is not None).
+
+    Example
+    -------
+    >>> from boto3.dynamodb.conditions import Attr
+    >>> put_item(table, {"uuid": "ID0", "field": 10.0})
+    >>> next_page_token = None
+    >>> while True:
+    >>>     items, next_page_token = scan_items(table, conditions=Attr("field").eq(10.0), page_start_token=next_page_token):
+    >>>     print(item)
+    {"uuid": "ID0", "field": 10.0}
+    """
+    kwargs = {
+        **(dict(FilterExpression=conditions) if conditions is not None else dict()),
+        **(dict(ExclusiveStartKey=page_start_token) if page_start_token is not None else dict()),
+        **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
+        **(dict(Limit=page_size) if page_size is not None else dict())
+    }
+    response = table.scan(**kwargs)
+    return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
+
+
 def query_items(table: object,
-                hash_key: object | None = None,
+                hash_key: object,
                 sort_key_interval: tuple[object | None, object | None] = (None, None),
                 ascending: bool=True,
                 conditions: ConditionBase | None = None,
@@ -263,8 +318,8 @@ def query_items(table: object,
     ------
     table : object
         The dynamodb Table object
-    hash_key : object or None
-        the value of the hash_key for returned items, or None
+    hash_key : object
+        the value of the hash_key for returned items
     sort_key_interval : tuple of two objects
         the (from, to) interval (including boundary on both sides) for the sort key, a None means an unbounded side for the interval
     ascending : bool
@@ -303,16 +358,15 @@ def query_items(table: object,
     # build key conditions if any
     table_keys = get_table_keys(table)
     sort_key_start, sort_key_end = sort_key_interval
-    key_conditions = Key(table_keys["HASH"]).eq(hash_key) if hash_key is not None else None
+    key_conditions = Key(table_keys["HASH"]).eq(hash_key)
     if any(k is not None for k in sort_key_interval): # Only a single condition by key is supported by boto3
         sort_key = Key(table_keys["RANGE"])
         if (sort_key_start is not None) and (sort_key_end is not None):
-            sort_condition = sort_key.between(sort_key_start, sort_key_end)
+            key_conditions = key_conditions & sort_key.between(sort_key_start, sort_key_end)
         elif sort_key_start is not None:
-            sort_condition = sort_key.gte(sort_key_start)
+            key_conditions = key_conditions & sort_key.gte(sort_key_start)
         elif sort_key_end is not None:
-            sort_condition = sort_key.lte(sort_key_end)
-        key_conditions = (key_conditions & sort_condition) if key_conditions is not None else sort_condition
+            key_conditions = key_conditions & sort_key.lte(sort_key_end)
     # get a single page of results
     kwargs = {
         **(dict(FilterExpression=conditions) if conditions is not None else dict()),
@@ -320,14 +374,11 @@ def query_items(table: object,
         **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
         **(dict(Limit=page_size) if page_size is not None else dict())
     }
-    if key_conditions is not None:
-        response = table.query(
-            KeyConditionExpression=key_conditions,
-            ScanIndexForward=ascending,
-            **kwargs
-        )
-    else:
-        response = table.scan(**kwargs)
+    response = table.query(
+        KeyConditionExpression=key_conditions,
+        ScanIndexForward=ascending,
+        **kwargs
+    )
     return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
@@ -407,7 +458,7 @@ def increment_item_field(
         table: object,
         key: dict,
         field: str,
-        delta: int | float,
+        value: int | float,
         default: int | float | None = None,
         return_object: bool=False
     ) -> int | float | None:
@@ -427,7 +478,7 @@ def increment_item_field(
         response = table.update_item(
             Key=key,
             UpdateExpression=f"SET {field} = if_not_exists({field}, :default) + :increment_amount",
-            ExpressionAttributeValues={":increment_amount": _recursive_convert(delta, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
+            ExpressionAttributeValues={":increment_amount": _recursive_convert(value, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
             ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated values after the increment
             **kwargs
         )
@@ -440,7 +491,7 @@ def extend_array_item_field(
         table: object,
         key: dict,
         field: str,
-        values: list,
+        value: list,
         default: list|None = None,
         return_object: bool=False
     ) -> list | None:
@@ -458,7 +509,7 @@ def extend_array_item_field(
         response = table.update_item(
             Key=key,
             UpdateExpression=f"SET {field} = list_append(if_not_exists({field}, :default), :new_items)",
-            ExpressionAttributeValues={':new_items': _recursive_convert(values, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
+            ExpressionAttributeValues={':new_items': _recursive_convert(value, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
             ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated value after the insertion
             **kwargs
             )
@@ -495,7 +546,10 @@ def extend_set_item_field(
             )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
-    return {v for v in value if v not in _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)}
+    previous = _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)
+    if previous is None:
+        previous = set()
+    return {v for v in value if v not in previous}
 
 
 def remove_from_set_item_field(
