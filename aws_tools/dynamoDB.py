@@ -10,21 +10,21 @@ dynamodb = boto3.resource("dynamodb")
 KeyType = dict[Literal["HASH", "RANGE"], object]
 
 
-def _recursive_convert(item: object, to: Type[Decimal] | Type[float]) -> object:
+def _recursive_convert(item: object, to_decimal: bool) -> object:
     """
     replace floats with Decimal objects recursively in a dict
     """
     if isinstance(item, list):
-        return [_recursive_convert(i, to) for i in item]
+        return [_recursive_convert(i, to_decimal) for i in item]
     elif isinstance(item, set):
-        return {_recursive_convert(i, to) for i in item}
+        return {_recursive_convert(i, to_decimal) for i in item}
     elif isinstance(item, dict):
-        return {k: _recursive_convert(v, to) for k, v in item.items()}
-    elif isinstance(item, float) and to == Decimal:
+        return {k: _recursive_convert(v, to_decimal) for k, v in item.items()}
+    elif isinstance(item, (int, float)) and to_decimal:
         return Decimal(item)
-    elif isinstance(item, Decimal) and to == float:
-        return float(item)
-    elif item is None or type(item) in [str, int, bool]:
+    elif isinstance(item, Decimal) and not to_decimal:
+        return float(item) if item % 1 != 0 else int(item)
+    elif item is None or type(item) in [str, bool]:
         return item
     else:
         raise ValueError(f"Unexpected type '{type(item).__name__}' encountered.")
@@ -50,6 +50,7 @@ def _key_exists_condition(table_keys: KeyType):
     if "RANGE" in table_keys.keys():
         condition += f" AND attribute_exists({table_keys['RANGE']})"
     return condition
+
 
 def _key_not_exists_condition(table_keys: KeyType):
     """
@@ -78,7 +79,7 @@ def get_table(table_name: str) -> object:
     return table
 
 
-def get_table_keys(table: object) -> dict:
+def get_table_keys(table: object) -> KeyType:
     """
     Get the {type: name} of the table keys
     """
@@ -151,16 +152,18 @@ def delete_table(table: object, blocking: bool=True):
         table.meta.client.get_waiter('table_not_exists').wait(TableName=table.name)
 
 
-def item_exists(table: object, key: KeyType) -> bool:
+def item_exists(table: object, key_or_item: dict) -> bool:
     """
     Returns True if the item exists and False otherwise.
     Faster and cheaper than a 'get_item' as this only query the partition key.
     """
+    table_keys = get_table_keys(table)
+    key = {v: key_or_item[v] for v in table_keys.values()}
     response = table.get_item(Key=key, ProjectionExpression=",".join(key.keys()))
     return "Item" in response
 
 
-def get_item(table: object, keys: KeyType) -> dict | None:
+def get_item(table: object, key_or_item: dict) -> dict | None:
     """
     Get a full item from it's keys, returns None if the key does not exist.
     If the table has an hash key and a range key, both must be provided in the 'keys' dict.
@@ -170,8 +173,10 @@ def get_item(table: object, keys: KeyType) -> dict | None:
     >>> get_item(table, {"id": "ID0"})
     {"uuid": "ID0", "field": 10.0}
     """
-    response = table.get_item(Key=keys)
-    return _recursive_convert(response.get("Item"), float)
+    table_keys = get_table_keys(table)
+    key = {v: key_or_item[v] for v in table_keys.values()}
+    response = table.get_item(Key=key)
+    return _recursive_convert(response.get("Item"), to_decimal=False)
 
 
 def put_item(table: object, item: dict, overwrite: bool=False, return_object: bool=False) -> dict | None:
@@ -189,35 +194,30 @@ def put_item(table: object, item: dict, overwrite: bool=False, return_object: bo
     assert all(k in item.keys() for k in table_keys.values())
     try:
         response = table.put_item(
-                Item=_recursive_convert(item, Decimal),
+                Item=_recursive_convert(item, to_decimal=True),
                 ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the overwritten item if any
                 **(dict() if overwrite else dict(ConditionExpression=_key_not_exists_condition(table_keys)))
                 )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            key = {k: item[k] for k in table_keys.values()}
-            raise KeyError(f"Item '{key}' already exists for table '{table.name}'")
-        else:
-            raise e
-    return _recursive_convert(response.get("Attributes"), float)
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        key = {k: item[k] for k in table_keys.values()}
+        raise KeyError(f"Item '{key}' already exists for table '{table.name}'")
+    return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-def batch_put_items(table: object, items: Iterable[dict]) -> int:
+def batch_put_items(table: object, items: Iterable[dict]):
     """
     Create items in batch, overwriting if they already exist.
-    Returns the number of writen items.
     """
-    i = 0
     with table.batch_writer() as batch:
-        for i, item in enumerate(items, start=1):
-            batch.put_item(Item=_recursive_convert(item, Decimal))
-    return i
+        for item in items:
+            batch.put_item(Item=_recursive_convert(item, to_decimal=True))
 
 
-def delete_item(table: object, key: dict, return_object: bool = False) -> dict | None:
+def delete_item(table: object, key_or_item: dict, return_object: bool = False) -> dict | None:
     """
     Delete an item at given key, and optionally return the erased item.
-    Raise an error if the item does not exists.
+    Does not fail if the item does not exists.
+    Returns None instead if the item did not exists.
 
     Example
     -------
@@ -228,29 +228,23 @@ def delete_item(table: object, key: dict, return_object: bool = False) -> dict |
     table_keys = get_table_keys(table)
     try:
         response = table.delete_item(
-            Key={k: key[k] for k in table_keys.values()},
+            Key={k: key_or_item[k] for k in table_keys.values()},
             ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the removed item
             ConditionExpression=_key_exists_condition(table_keys)
             )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' is missing from table '{table.name}'")
-        else:
-            raise e
-    return _recursive_convert(response.get("Attributes"), float)
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        return None
+    return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-def batch_delete_items(table: object, keys_or_items: list[KeyType | dict]) -> int:
+def batch_delete_items(table: object, keys_or_items: Iterable[dict]):
     """
     Delete the items by batch, there is no verification that they did not exist.
-    Returns the number of deleted items.
     """
-    i = 0
     table_keys = get_table_keys(table)
     with table.batch_writer() as batch:
-        for i, key in enumerate(keys_or_items, start=1):
+        for key in keys_or_items:
             batch.delete_item(Key={v: key[v] for v in table_keys.values()})
-    return i
 
 
 def query_items(table: object,
@@ -334,10 +328,10 @@ def query_items(table: object,
         )
     else:
         response = table.scan(**kwargs)
-    return ([_recursive_convert(item, float) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
+    return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
-def get_item_field(table: object, key: KeyType, field: str) -> dict | None:
+def get_item_field(table: object, key: dict, field: str) -> dict | None:
     """
     Get the given field from an item.
     Raise an error if the item does not exists, but returns None if the field does not exist.
@@ -356,10 +350,10 @@ def get_item_field(table: object, key: KeyType, field: str) -> dict | None:
     item = response.get("Item")
     if item == {}:
         raise KeyError(f"Field '{field}' is missing from item '{key}' in table '{table.name}'")
-    return _extract_item_field_value(_recursive_convert(item, float), field)
+    return _recursive_convert(_extract_item_field_value(item, field), to_decimal=False)
 
 
-def put_item_field(table: object, key: KeyType, field: str, new_value: float, overwrite: bool=False, return_object: bool=False) -> dict | None:
+def put_item_field(table: object, key: dict, field: str, new_value: float, overwrite: bool=False, return_object: bool=False) -> dict | None:
     """
     set the field of an item at given key.
 
@@ -377,19 +371,16 @@ def put_item_field(table: object, key: KeyType, field: str, new_value: float, ov
         response = table.update_item(
             Key=key,
             UpdateExpression=f"SET {field} = :new_value",
-            ExpressionAttributeValues={':new_value': _recursive_convert(new_value, Decimal)},
+            ExpressionAttributeValues={':new_value': _recursive_convert(new_value, to_decimal=True)},
             ReturnValues="UPDATED_OLD" if return_object else "NONE",  # Return the updated values after setting
             ConditionExpression=condition # only update if the item did exist
             )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' is missing for table '{table.name}'"+("" if overwrite else f"  or it's field '{field}' already exists"))
-        else:
-            raise e
-    return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise KeyError(f"Item '{key}' is missing for table '{table.name}'"+("" if overwrite else f"  or it's field '{field}' already exists"))
+    return _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)
 
 
-def remove_item_field(table: object, key: KeyType, field: str, return_object: bool=False) -> dict | None:
+def remove_item_field(table: object, key: dict, field: str, return_object: bool=False) -> dict | None:
     """
     Remove a field from an existing item.
     Raise an error if the item or field does not exist.
@@ -407,100 +398,117 @@ def remove_item_field(table: object, key: KeyType, field: str, return_object: bo
             ConditionExpression=f"attribute_exists({field})",  # only update if the item did exist
             ReturnValues="UPDATED_OLD" if return_object else "NONE"  # Returns the removed values
             )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
-        else:
-            raise e
-    return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
+    return _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)
 
 
-def increment_item_field_or_create(
+def increment_item_field(
         table: object,
-        key: KeyType,
+        key: dict,
         field: str,
         delta: int | float,
-        default: int | float = 0,
-        return_object: bool=False) -> float | None:
+        default: int | float | None = None,
+        return_object: bool=False
+    ) -> int | float | None:
     """
     Increment the field of an item at given key.
-    Increments from the 'default' value if the field did not exist in the item.
-    The item is created if it did not exists before.
+    If default is provided, missing item or field are created with 'default' as initial value for the field, before increment.
+    Otherwise raise a KeyError if the item or field does not exist.
 
     Example
     -------
-    >>> increment_item_field_or_create(table, {"id": "ID0"}, "value", -2.5)
-    >>> increment_item_field_or_create(table, {"id": "ID0"}, "value", 8, return_object=True)
+    >>> increment_item_field(table, {"id": "ID0"}, "value", -2.5)
+    >>> increment_item_field(table, {"id": "ID0"}, "value", 8, return_object=True)
     3.0
     """
-    response = table.update_item(
-        Key=key,
-        UpdateExpression=f"SET {field} = if_not_exists({field}, :default) + :increment_amount",
-        ExpressionAttributeValues={":increment_amount": _recursive_convert(delta, Decimal), ":default": _recursive_convert(default, Decimal)},
-        ReturnValues="UPDATED_NEW" if return_object else "NONE"  # Return the updated values after the increment
-    )
-    return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
+    kwargs = dict(ConditionExpression=f"attribute_exists({field})") if default is None else dict()
+    try:
+        response = table.update_item(
+            Key=key,
+            UpdateExpression=f"SET {field} = if_not_exists({field}, :default) + :increment_amount",
+            ExpressionAttributeValues={":increment_amount": _recursive_convert(delta, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
+            ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated values after the increment
+            **kwargs
+        )
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
+    return _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)
 
 
-def extend_array_item_field(table: object, key: KeyType, field: str, values: list[object], return_object: bool=False) -> dict | None:
+def extend_array_item_field(
+        table: object,
+        key: dict,
+        field: str,
+        values: list,
+        default: list|None = None,
+        return_object: bool=False
+    ) -> list | None:
     """
     increment the field of an item at given key.
-    Raise an error if the item or field does not exist.
+    Raise an error if the item or field does not exist,
+    unless default is provided in which case it is initialized to default before.
 
     Example
     -------
     >>> increment_item_field(table, {"id": "ID0"}, "array_field", -2.5)
     """
+    kwargs = dict(ConditionExpression=f"attribute_exists({field})") if default is None else dict()
     try:
         response = table.update_item(
             Key=key,
-            UpdateExpression=f"SET {field} = list_append({field}, :new_items)",
-            ExpressionAttributeValues={':new_items': _recursive_convert(values, Decimal)},
-            ConditionExpression=f"attribute_exists({field})",  # only update if the field did exist
-            ReturnValues="UPDATED_NEW" if return_object else "NONE"  # Return the updated value after the insertion
+            UpdateExpression=f"SET {field} = list_append(if_not_exists({field}, :default), :new_items)",
+            ExpressionAttributeValues={':new_items': _recursive_convert(values, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
+            ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated value after the insertion
+            **kwargs
             )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
-        else:
-            raise e
-    return _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
+    return _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)
 
 
-def insert_in_set_item_field(table: object, key: KeyType, field: str, value: object, return_object: bool=False) -> bool | None:
+def extend_set_item_field(
+        table: object,
+        key: dict,
+        field: str,
+        value: set,
+        create_if_missing: bool = False,
+        return_object: bool=False
+    ) -> set | None:
     """
-    Insert a value in a set field at given key.
+    Insert the given values in a set field at given key.
     Raise an error if the item or field does not exist.
-    Returns wether the value already exist in the set if return_object is True.
+    If 'return_object' is True, returns the subset of add objects that were not already present.
 
     Example
     -------
     >>> insert_in_set_item_field(table, {"id": "ID0"}, "alphabet", "d")
     """
+    kwargs = dict(ConditionExpression=f"attribute_exists({field})") if not create_if_missing else dict()
     try:
         response = table.update_item(
             Key=key,
-            UpdateExpression=f"ADD {field} :item_to_add",
-            ExpressionAttributeValues={':item_to_add': {_recursive_convert(value, Decimal)}},
-            ConditionExpression=f"attribute_exists({field})",  # only update if the field did exist
-            ReturnValues="UPDATED_OLD" if return_object else "NONE"  # Return the updated value after the insertion
+            UpdateExpression=f"ADD {field} :set_to_add",
+            ExpressionAttributeValues={':set_to_add': _recursive_convert(value, to_decimal=True)},
+            ReturnValues="UPDATED_OLD" if return_object else "NONE",  # Return the updated value after the insertion
+            **kwargs
             )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
-        else:
-            raise e
-    if return_object:
-        return value in _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
-    else:
-        return
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
+    return {v for v in value if v not in _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)}
 
 
-def remove_from_set_item_field(table: object, key: KeyType, field: str, value: object, return_object: bool=False) -> bool | None:
+def remove_from_set_item_field(
+        table: object,
+        key: dict,
+        field: str,
+        value: set,
+        return_object: bool=False
+    ) -> set | None:
     """
-    Removes the given value from a set field at given key.
+    Removes the given values from a set field at given key.
     Raise an error if the item or field does not exists.
-    Returns wether the value already exist in the set if return_object is True.
+    If 'return_object' is True, returns the subset of removed objects that were present.
 
     Example
     -------
@@ -509,20 +517,14 @@ def remove_from_set_item_field(table: object, key: KeyType, field: str, value: o
     try:
         response = table.update_item(
             Key=key,
-            UpdateExpression=f"DELETE {field} :item_to_delete",
-            ExpressionAttributeValues={':item_to_delete': {_recursive_convert(value, Decimal)}},
+            UpdateExpression=f"DELETE {field} :set_to_delete",
+            ExpressionAttributeValues={':set_to_delete': _recursive_convert(value, to_decimal=True)},
             ConditionExpression=f"attribute_exists({field})",  # only update if the field did exist
-            ReturnValues="UPDATED_OLD" if return_object else "NONE"  # Return the updated value after the insertion
+            ReturnValues="UPDATED_OLD" if return_object else "NONE"
             )
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
-        else:
-            raise e
-    if return_object:
-        return value in _extract_item_field_value(_recursive_convert(response.get("Attributes"), float), field)
-    else:
-        return
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise KeyError(f"Item '{key}' or it's field '{field}' is missing from table '{table.name}'")
+    return {v for v in value if v in _recursive_convert(_extract_item_field_value(response.get("Attributes"), field), to_decimal=False)}
 
 
 if __name__ == "__main__":
