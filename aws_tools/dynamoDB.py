@@ -302,6 +302,33 @@ def scan_items(
     return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
+class Scan:
+    """
+    Exposes a generator to iterate over all items in a table.
+    """
+
+    def __init__(self,
+            table: object,
+            conditions: ConditionBase | None = None,
+            subset: list[str] | None = None,
+            page_size: int | None = 1_000,
+        ):
+        self.kwargs = dict(
+            table=table,
+            conditions=conditions,
+            subset=subset,
+            page_size=page_size
+        )
+    
+    def __iter__(self) -> Iterable[dict]:
+        next_page_token = None
+        while True:
+            items, next_page_token = scan_items(page_start_token=next_page_token, **self.kwargs)
+            yield from items
+            if next_page_token is None:
+                break
+
+
 def query_items(table: object,
                 hash_key: object,
                 sort_key_interval: tuple[object | None, object | None] = (None, None),
@@ -380,6 +407,39 @@ def query_items(table: object,
         **kwargs
     )
     return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
+
+
+class Query:
+    """
+    Exposes a generator to iterate over queried items in a table.
+    """
+
+    def __init__(self,
+            table: object,
+            hash_key: object,
+            sort_key_interval: tuple[object | None, object | None] = (None, None),
+            ascending: bool=True,
+            conditions: ConditionBase | None = None,
+            subset: list[str] | None = None,
+            page_size: int | None = 1_000
+        ):
+        self.kwargs = dict(
+            table=table,
+            hash_key=hash_key,
+            sort_key_interval=sort_key_interval,
+            ascending=ascending,
+            conditions=conditions,
+            subset=subset,
+            page_size=page_size
+        )
+
+    def __iter__(self) -> Iterable[dict]:
+        next_page_token = None
+        while True:
+            items, next_page_token = query_items(page_start_token=next_page_token, **self.kwargs)
+            yield from items
+            if next_page_token is None:
+                break
 
 
 def get_item_field(table: object, key: dict, field: str) -> dict | None:

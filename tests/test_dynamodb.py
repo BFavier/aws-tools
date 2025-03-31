@@ -3,7 +3,7 @@ from uuid import uuid4
 from decimal import Decimal
 from aws_tools.dynamoDB import list_tables, get_table, get_table_keys, table_exists, create_table, delete_table
 from aws_tools.dynamoDB import item_exists, get_item, put_item, batch_put_items, delete_item, batch_delete_items
-from aws_tools.dynamoDB import scan_items, query_items, Attr, Decimal
+from aws_tools.dynamoDB import scan_items, query_items, Scan, Query, Attr, Decimal
 from aws_tools.dynamoDB import (get_item_field, put_item_field, remove_item_field,
                                 increment_item_field, extend_array_item_field,
                                 extend_set_item_field, remove_from_set_item_field)
@@ -131,8 +131,10 @@ class DynamoDBTest(unittest.TestCase):
         assert get_table_keys(self.table)["RANGE"] == "event_time"  # event time is the sort key
         # scan all items
         assert all(v in (self.another_item, self.item) for v in scan_items(self.table)[0])
+        assert all(v in (self.another_item, self.item) for v in Scan(self.table, conditions=Attr("field").eq(Decimal(10.0))))
         # query with hash key only
         assert all(v in (self.another_item, self.item) for v in query_items(self.table, hash_key=self.item_id["id"])[0])
+        assert all(v in (self.another_item, self.item) for v in Query(self.table, hash_key=self.item_id["id"]))
         # query with hash and sort key
         assert query_items(self.table, hash_key=self.item_id["id"], sort_key_interval=(None, "21h00"))[0] == [self.another_item]
         assert query_items(self.table, hash_key=self.item_id["id"], sort_key_interval=("23h30", None))[0] == [self.item]
