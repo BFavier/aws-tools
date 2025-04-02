@@ -7,6 +7,7 @@ from aws_tools.dynamoDB import scan_items, query_items, Scan, Query, Attr, Decim
 from aws_tools.dynamoDB import (get_item_field, put_item_field, remove_item_field,
                                 increment_item_field, extend_array_item_field,
                                 extend_set_item_field, remove_from_set_item_field)
+from aws_tools.dynamoDB import DynamoDBException
 
 
 class check_fail:
@@ -15,12 +16,17 @@ class check_fail:
     If there was no error on leaving the context, raise one.
     """
 
+    def __init__(self, exception_type: type[Exception] = Exception):
+        self.exception_type = exception_type
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
+        if isinstance(exc_value, self.exception_type):
             return True
+        elif exc_value is not None:
+            raise exc_value
         raise RuntimeError("This should have raised an error.")
 
 
@@ -72,11 +78,11 @@ class DynamoDBTest(unittest.TestCase):
         """
         assert self.table_name in list_tables()
         table = get_table(self.table_name)
-        with check_fail():
+        with check_fail(DynamoDBException):
             get_table("unknown_table")
         assert table_exists(self.table_name)
         assert not table_exists("unknown_table")
-        with check_fail():
+        with check_fail(DynamoDBException):
             create_table(self.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
 
     def test_table_deletion(self):
@@ -86,7 +92,7 @@ class DynamoDBTest(unittest.TestCase):
         delete_table(new_table)
         assert not table_exists(new_table_name)
         assert new_table_name not in list_tables()
-        with check_fail():
+        with check_fail(DynamoDBException):
             delete_table(new_table)
 
     def test_item_api(self):
@@ -109,7 +115,7 @@ class DynamoDBTest(unittest.TestCase):
         assert get_item(self.table, self.item) == self.item
         assert get_item(self.table, self.another_id) == self.another_item
         # check overwrite behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             put_item(self.table, self.item_id)
         assert put_item(self.table, self.new_item, overwrite=True, return_object=True) == self.item
         assert get_item(self.table, self.item_id) == self.new_item  # verify that the item has correctly be overwritten
@@ -145,32 +151,35 @@ class DynamoDBTest(unittest.TestCase):
         # query with conditions
         assert query_items(self.table, hash_key=self.item_id["id"], sort_key_interval=("21h00", "23h30"), conditions=Attr("field").eq(Decimal(10.0)))[0] == [self.item]
 
-    def test_field_api(self):
+    def test_item_field_api(self):
         # everything raise an error on missing item
-        with check_fail():
+        with check_fail(DynamoDBException):
             get_item_field(self.table, self.item_id, "field")
-        with check_fail():
-            put_item_field(self.table, self.item_id, "field")
-        with check_fail():
-            put_item_field(self.table, self.item_id, "field", overwrite=True)
-        with check_fail():
+        with check_fail(DynamoDBException):
+            put_item_field(self.table, self.item_id, "field", "some_value")
+        with check_fail(DynamoDBException):
+            put_item_field(self.table, self.item_id, "field", "some_value", overwrite=True)
+        with check_fail(DynamoDBException):
             remove_item_field(self.table, self.item_id, "field")
         # create the item
         put_item(self.table, self.new_item, overwrite=False)
+        # getting a missing field from an existing item fails
+        with check_fail(DynamoDBException):
+            get_item_field(self.table, self.item_id, "missing_field")
         # creating several depths of field at once does not work
-        with check_fail():
-            put_item_field(self.table, self.item_id, "missing_field.subfield", 4, overwrite=True)
+        with check_fail(DynamoDBException):
+            put_item_field(self.table, self.item_id, ["missing_field", "subfield"], 4, overwrite=True)
         # set item can overwrite an existing field or raise an error depending on the 'overwrite' flag
-        with check_fail():
-            put_item_field(self.table, self.item_id, "array_field[0].nested", 3.5, overwrite=False)
-        assert put_item_field(self.table, self.item_id, "array_field[0].nested", 3.5, overwrite=True, return_object=True) == 10.0
+        with check_fail(DynamoDBException):
+            put_item_field(self.table, self.item_id, ["array_field", 0, "nested"], 3.5, overwrite=False)
+        assert put_item_field(self.table, self.item_id, ["array_field", 0, "nested"], 3.5, overwrite=True, return_object=True) == 10.0
         # existing items can be returned, you can use complex field paths
         assert get_item_field(self.table, self.item_id, "field") == -1
-        assert get_item_field(self.table, self.item_id, "array_field[0].nested")  == 3.5
+        assert get_item_field(self.table, self.item_id, ["array_field", 0, "nested"])  == 3.5
         # some functions raise an error on a missing field, because if they returned None, we could not distinguishe between a None field or no field
-        with check_fail():
+        with check_fail(DynamoDBException):
             get_item_field(self.table, self.item_id, "missing_field")
-        with check_fail():
+        with check_fail(DynamoDBException):
             remove_item_field(self.table, self.item_id, "missing_field")
         # put_item_field returns None if the item was missing
         assert put_item_field(self.table, self.item_id, "missing_field", "abcd", return_object=True) is None
@@ -183,16 +192,16 @@ class DynamoDBTest(unittest.TestCase):
         assert increment_item_field(self.table, self.item_id, "field", value=1, return_object=True) == 0.0
         assert increment_item_field(self.table, self.item_id, "field", value=2.0, return_object=True) == 2.0
         # missing field behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             increment_item_field(self.table, self.item_id, "missing_field", value=1, default=None)
         assert increment_item_field(self.table, self.item_id, "missing_field", value=1, default=0, return_object=True) == 1  # with default value, missing field works
         # missing item behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             increment_item_field(self.table, self.another_id, "field", value=1, default=None)
         assert increment_item_field(self.table, self.another_id, "field", value=1, default=0, return_object=True) == 1  # with default value, missing id works
         # missing multi-level field behaviour
-        with check_fail():
-            increment_item_field(self.table, {"id": "ID0", "event_time": "now"}, "yet_another_missing_field.subfield", value=1, default=0, return_object=True)
+        with check_fail(DynamoDBException):
+            increment_item_field(self.table, {"id": "ID0", "event_time": "now"}, ["yet_another_missing_field", "subfield"], value=1, default=0, return_object=True)
         assert not item_exists(self.table, {"id": "ID0", "event_time": "now"})
 
     def test_extend_array_field(self):
@@ -203,16 +212,16 @@ class DynamoDBTest(unittest.TestCase):
         assert extend_array_item_field(self.table, self.item_id, "array_field", value=[1], return_object=True) == [{"nested": 10.0}, 1]
         assert extend_array_item_field(self.table, self.item_id, "array_field", value=[False, "string"], return_object=True) == [{"nested": 10.0}, 1, False, "string"]
         # missing field behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             extend_array_item_field(self.table, self.item_id, "missing_field", value=[1], default=None)
         assert extend_array_item_field(self.table, self.item_id, "missing_field", value=[1], default=["ok"], return_object=True) == ["ok", 1]
         # missing item behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             extend_array_item_field(self.table, self.another_id, "array_field", value=[1], default=None)
         assert extend_array_item_field(self.table, self.another_id, "array_field", value=[1], default=["ok"], return_object=True) == ["ok", 1]
         # missing multi-level field behaviour
-        with check_fail():
-            extend_array_item_field(self.table, {"id": "ID0", "event_time": "now"}, "yet_another_missing_field.subfield", value=[1], default=["ok"], return_object=True)
+        with check_fail(DynamoDBException):
+            extend_array_item_field(self.table, {"id": "ID0", "event_time": "now"}, ["yet_another_missing_field", "subfield"], value=[1], default=["ok"], return_object=True)
         assert not item_exists(self.table, {"id": "ID0", "event_time": "now"})
 
     def test_extend_set_field(self):
@@ -222,21 +231,21 @@ class DynamoDBTest(unittest.TestCase):
         # expected behaviour
         assert extend_set_item_field(self.table, self.item_id, "set_field", value={"a", "d"}, return_object=True) == {"d"}
         # mixed types behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             assert extend_set_item_field(self.table, self.item_id, "set_field", value={1})
         # missing field behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             extend_set_item_field(self.table, self.item_id, "missing_field", value={"z"})
         assert extend_set_item_field(self.table, self.item_id, "missing_field", value={"z"}, create_if_missing=True, return_object=True) == {"z"}
         # missing item behaviour
-        with check_fail():
-            extend_set_item_field(self.table, self.another_id, "set_field", value={1}, default=None)
+        with check_fail(DynamoDBException):
+            extend_set_item_field(self.table, self.another_id, "set_field", value={1}, create_if_missing=False)
         assert extend_set_item_field(self.table, self.another_id, "set_field", value={1}, create_if_missing=True, return_object=True) == {1}
         # missing multi-level field behaviour
-        with check_fail():
-            extend_set_item_field(self.table, {"id": "ID0", "event_time": "now"}, "yet_another_missing_field.subfield", value={1}, create_if_missing=True)
+        with check_fail(DynamoDBException):
+            extend_set_item_field(self.table, {"id": "ID0", "event_time": "now"}, ["yet_another_missing_field", "subfield"], value={1}, create_if_missing=True)
         assert not item_exists(self.table, {"id": "ID0", "event_time": "now"})
-    
+
     def test_remove_from_set_field(self):
         # create the item
         put_item(self.table, self.new_item, overwrite=False)
@@ -244,10 +253,10 @@ class DynamoDBTest(unittest.TestCase):
         # expected behaviour
         assert remove_from_set_item_field(self.table, self.item_id, "set_field", value={"a", "d"}, return_object=True) == {"a"}
         # missing field behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             extend_set_item_field(self.table, self.item_id, "missing_field", value={"b"})
         # missing item behaviour
-        with check_fail():
+        with check_fail(DynamoDBException):
             extend_set_item_field(self.table, self.another_id, "set_field", value={"b"})
 
 if __name__ == "__main__":
