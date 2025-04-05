@@ -34,7 +34,7 @@ def _recursive_convert(item: object, to_decimal: bool) -> object:
         raise ValueError(f"Unexpected type '{type(item).__name__}' encountered.")
 
 
-def _extract_item_field_value(item: dict | None, field_path: list[str | int]) -> object:
+def _extract_item_field_value(item: dict | None, field_path: str | tuple[str | int]) -> object:
     """
     returnds the value at given path
 
@@ -43,28 +43,29 @@ def _extract_item_field_value(item: dict | None, field_path: list[str | int]) ->
     >>> _extract_item_field_value({"array": ["A", "B", {"sub_field": 1}]}, ["array", 2, "sub_field"])
     1
     """
+    if isinstance(field_path, str):
+        field_path = (field_path,)
     for key in field_path:
         item = item[key]
     return item
 
 
-def _field_path_to_expression(*args: tuple[list[str | int], ...]) -> tuple[str, dict]:
+def _field_path_to_expression(*args: tuple[str | tuple[str | int], ...]) -> tuple[str, dict]:
     """
     converts a set of field path to a tuple of (expressions, path_representation, attribute_names)
 
     Example
     -------
-    >>> _field_path_to_expression(["array_field", 0, "sub_field"], ["array_field", 1, "other_subfield"])
+    >>> _field_path_to_expression(("array_field", 0, "sub_field"), ("array_field", 1, "other_subfield"))
     (('#f2[0].#f0', '#f2[1].#f1'),
-     ('array_field[0].sub_field', 'array_field[1].other_subfield'),
      {'#f0': 'sub_field', '#f1': 'other_subfield', '#f2': 'array_field'})
     """
+    args = tuple((f,) if isinstance(f, str) else f for f in args)
     unique_attributes = {f for arg in args for f in arg if isinstance(f, str)}
     attributes_mapping = {k: f"#f{i}" for i, k in enumerate(unique_attributes)}
     expressions = tuple("".join("."+attributes_mapping[f] if isinstance(f, str) else f"[{f}]" for f in arg).strip(".") for arg in args)
-    paths = tuple("".join("."+f if isinstance(f, str) else f"[{f}]" for f in arg).strip(".") for arg in args)
     attribute_names = {v: k for k, v in attributes_mapping.items()}
-    return (expressions, paths, attribute_names)
+    return expressions, attribute_names
 
 
 def _key_exists_condition(table_keys: KeyType, attribute_names: dict[str, str]):
@@ -225,7 +226,7 @@ def put_item(table: object, item: dict, overwrite: bool=False, return_object: bo
     {"uuid": "ID0", "field": 10.0}
     """
     table_keys = get_table_keys(table)
-    _, _, attribute_names = _field_path_to_expression(*([v] for v in table_keys.values()))
+    _, attribute_names = _field_path_to_expression(*(v for v in table_keys.values()))
     assert all(k in item.keys() for k in table_keys.values())
     try:
         response = table.put_item(
@@ -261,7 +262,7 @@ def delete_item(table: object, key_or_item: dict, return_object: bool = False) -
     {"uuid": "ID1", "field": 10.0}
     """
     table_keys = get_table_keys(table)
-    _, _, attribute_names = _field_path_to_expression(*([v] for v in table_keys.values()))
+    _, attribute_names = _field_path_to_expression(*(v for v in table_keys.values()))
     try:
         response = table.delete_item(
             Key={k: key_or_item[k] for k in table_keys.values()},
@@ -479,309 +480,403 @@ class Query:
                 break
 
 
-def get_item_field(table: object, key: dict, field_path: str | Iterable[str | int]) -> dict | None:
+def update_item(
+        table: object,
+        key_or_item: dict,
+        *,
+        put_fields: dict[str | tuple[str | int], object] = {},
+        increment_fields: dict[str | tuple[str | int], object] = {},
+        extend_sets: dict[str | tuple[str | int], object | set] = {},
+        remove_from_sets: dict[str | tuple[str | int], object | set] = {},
+        extend_arrays: dict[str | tuple[str | int], list] = {},
+        delete_fields: Iterable[str | tuple[str | int]] = [],
+        create_item_if_missing: bool=False,
+        return_object: bool=False
+    ) -> dict | None:
     """
-    Get the given field from an item.
-    Raise an error if the item does not exists, but returns None if the field does not exist.
+    Update an item fields
+    """
+    delete_fields = set(delete_fields)
+    if sum(len(v) for v in (put_fields, increment_fields, extend_sets, remove_from_sets, extend_arrays, delete_fields)) == 0:
+        raise DynamoDBException("At least one update must be made to the item")
+    table_keys = get_table_keys(table)
+    key = {k: key_or_item[k] for k in table_keys.values()}
+    expressions, attribute_names = _field_path_to_expression(
+        *put_fields.keys(), *extend_arrays.keys(), *increment_fields.keys(),
+        *extend_sets.keys(), *remove_from_sets.keys(), *delete_fields,
+        *((v for v in table_keys.values()) if not create_item_if_missing else [])
+    )
+    attribute_values = {}
+    expression_iterable = iter(expressions)
+    set_expressions = []
+    for i, (value, expr) in enumerate(zip(put_fields.values(), expression_iterable)):
+        attribute_values[f":set_value{i}"] = _recursive_convert(value, to_decimal=True)
+        set_expressions.append(f"{expr} = :set_value{i}")
+    for i, (value, expr) in enumerate(zip(extend_arrays.values(), expression_iterable)):
+        attribute_values[f":extend_value{i}"] = _recursive_convert(list(value), to_decimal=True)
+        set_expressions.append(f"{expr} = list_append({expr}, :extend_value{i})")
+    add_expressions = []
+    for i, (value, expr) in enumerate(zip(increment_fields.values(), expression_iterable)):
+        attribute_values[f":add_value{i}"] = _recursive_convert(value, to_decimal=True)
+        add_expressions.append(f"{expr} :add_value{i}")
+    for i, (value, expr) in enumerate(zip(extend_sets.values(), expression_iterable)):
+        attribute_values[f":insert_value{i}"] = _recursive_convert(value, to_decimal=True)
+        add_expressions.append(f"{expr} :insert_value{i}")
+    delete_expressions = []
+    for i, (value, expr) in enumerate(zip(remove_from_sets.values(), expression_iterable)):
+        value = value if isinstance(value, set) else {value}
+        attribute_values[f":pop_value{i}"] = _recursive_convert(value, to_decimal=True)
+        delete_expressions.append(f"{expr} :pop_value{i}")
+    remove_expressions = []
+    for i, (value, expr) in enumerate(zip(delete_fields, expression_iterable)):
+        remove_expressions.append(f"{expr}")
+    expression = " ".join(f"{kw} {', '.join(expr)}" for kw, expr in (("SET", set_expressions), ("ADD", add_expressions), ("DELETE", delete_expressions), ("REMOVE", remove_expressions)) if len(expr) > 0)
+    kwargs = (dict() if create_item_if_missing else dict(ConditionExpression=_key_exists_condition(table_keys, attribute_names)))
+    try:
+        response = table.update_item(
+            Key=key,
+            UpdateExpression=expression,
+            ExpressionAttributeValues=attribute_values,
+            ExpressionAttributeNames=attribute_names,
+            ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated values after setting
+            **kwargs
+            )
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        raise DynamoDBException(f"The item '{key}' from table '{table.name}' does not exist")
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ValidationException":
+            raise DynamoDBException(f"Some part of the field paths do not exist for item '{key}' from table '{table.name}'")
+        else:
+            raise
+    if not return_object:
+        return
+    else:
+        return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
-    Example
-    -------
-    >>> get_item_field(table, {"id": "ID0"}, ["field_list", 0, "sub_field"])
-    {"number": 10.0, "string": "abc"}
+
+def get_item_fields(table: object, key_or_item: dict, fields: set[str | tuple[str | int]]) -> dict | None:
     """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+    Returns the given fields (or field paths) from the item at given key.
+    If the items does not exist, returns None.
+    """
+    table_keys = get_table_keys(table)
+    key = {k: key_or_item[k] for k in table_keys.values()}
+    expressions, attribute_names = _field_path_to_expression(*fields)
     response = table.get_item(
         Key=key,
-        ProjectionExpression=expression,
+        ProjectionExpression=", ".join(expressions),
         ExpressionAttributeNames=attribute_names
     )
     if "Item" not in response:
-        raise DynamoDBException(f"Item '{key}' is missing from table '{table.name}'")
+        return None
     item = response.get("Item")
-    if len(item) == 0:
-        raise DynamoDBException(f"Field '{path}' is missing from item '{key}' in table '{table.name}'")
-    field_value = _extract_item_field_value(item, field_path)
-    return _recursive_convert(field_value, to_decimal=False)
+    fields = {f: _extract_item_field_value(item, f) for f in fields}
+    return _recursive_convert(fields, to_decimal=False)
 
 
-def put_item_field(
-        table: object,
-        key: dict,
-        field_path: str | Iterable[str | int],
-        new_value: object,
-        overwrite: bool=False,
-        return_object: bool=False
-    ) -> dict | None:
-    """
-    set the field of an item at given key.
+# def get_item_field(table: object, key: dict, field_path: str | Iterable[str | int]) -> dict | None:
+#     """
+#     Get the given field from an item.
+#     Raise an error if the item does not exists, but returns None if the field does not exist.
 
-    Example
-    -------
-    >>> put_item_field(table, {"id": "ID0"}, "value", "abcd")
-    >>> put_item_field(table, {"id": "ID0"}, "value", -2.5, overwrite=True, return_object=True)
-    "abcd"
-    """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    table_keys = get_table_keys(table)
-    expressions, paths, attribute_names = _field_path_to_expression(field_path, *([v] for v in table_keys.values()))
-    condition = _key_exists_condition(table_keys, attribute_names)
-    if not overwrite:
-        condition += f" AND attribute_not_exists({expressions[0]})"
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"SET {expressions[0]} = :new_value",
-            ExpressionAttributeValues={":new_value": _recursive_convert(new_value, to_decimal=True)},
-            ExpressionAttributeNames=attribute_names,
-            ReturnValues="UPDATED_OLD" if return_object else "NONE",  # Return the updated values after setting
-            ConditionExpression=condition, # only update if the item did exist
-            )
-    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
-        raise DynamoDBException(f"The item '{key}' from table '{table.name}' does not exist, or it's field '{paths[0]}' already do")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field '{paths[0]}' do not exist for item '{key}' from table '{table.name}'")
-        else:
-            raise
-    if not return_object:
-        return
-    else:
-        item = response.get("Attributes")
-        if item is None:
-            return None
-        field_value = _extract_item_field_value(item, field_path)
-        return _recursive_convert(field_value, to_decimal=False)
+#     Example
+#     -------
+#     >>> get_item_field(table, {"id": "ID0"}, ["field_list", 0, "sub_field"])
+#     {"number": 10.0, "string": "abc"}
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+#     response = table.get_item(
+#         Key=key,
+#         ProjectionExpression=expression,
+#         ExpressionAttributeNames=attribute_names
+#     )
+#     if "Item" not in response:
+#         raise DynamoDBException(f"Item '{key}' is missing from table '{table.name}'")
+#     item = response.get("Item")
+#     if len(item) == 0:
+#         raise DynamoDBException(f"Field '{path}' is missing from item '{key}' in table '{table.name}'")
+#     field_value = _extract_item_field_value(item, field_path)
+#     return _recursive_convert(field_value, to_decimal=False)
 
 
-def remove_item_field(
-        table: object,
-        key: dict,
-        field_path: str,
-        return_object: bool=False
-    ) -> dict | None:
-    """
-    Remove a field from an existing item.
-    Raise an error if the item or field does not exist.
+# def put_item_field(
+#         table: object,
+#         key: dict,
+#         field_path: str | Iterable[str | int],
+#         new_value: object,
+#         overwrite: bool=False,
+#         return_object: bool=False
+#     ) -> dict | None:
+#     """
+#     set the field of an item at given key.
 
-    Example
-    -------
-    >>> remove_item_field(table, {"id": "ID0"}, "value")
-    >>> remove_item_field(table, {"id": "ID0"}, ["field", "list_field", 0, "nested"], return_object=True)
-    {"other-nested": -5}
-    """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"REMOVE {expression}",
-            ConditionExpression=f"attribute_exists({expression})",  # only update if the item did exist
-            ExpressionAttributeNames=attribute_names,
-            ReturnValues="UPDATED_OLD" if return_object else "NONE"  # Returns the removed values
-            )
-    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
-        raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
-        else:
-            raise
-    if not return_object:
-        return
-    else:
-        item = response.get("Attributes")
-        if item is None:
-            return None
-        field_value = _extract_item_field_value(item, field_path)
-        return _recursive_convert(field_value, to_decimal=False)
-
-
-def increment_item_field(
-        table: object,
-        key: dict,
-        field_path: str,
-        value: int | float,
-        default: int | float | None = None,
-        return_object: bool=False
-    ) -> int | float | None:
-    """
-    Increment the field of an item at given key.
-    If default is provided, missing item or field are created with 'default' as initial value for the field, before increment.
-    Otherwise raise a KeyError if the item or field does not exist.
-
-    Example
-    -------
-    >>> increment_item_field(table, {"id": "ID0"}, "value", -2.5)
-    >>> increment_item_field(table, {"id": "ID0"}, "value", 8, return_object=True)
-    3.0
-    """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
-    kwargs = dict(ConditionExpression=f"attribute_exists({expression})") if default is None else dict()
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"SET {expression} = if_not_exists({expression}, :default) + :increment_amount",
-            ExpressionAttributeValues={":increment_amount": _recursive_convert(value, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
-            ExpressionAttributeNames=attribute_names,
-            ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated values after the increment
-            **kwargs
-        )
-    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
-        raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
-        else:
-            raise
-    if not return_object:
-        return
-    else:
-        item = response.get("Attributes")
-        if item is None:
-            return None
-        field_value = _extract_item_field_value(item, field_path)
-        return _recursive_convert(field_value, to_decimal=False)
+#     Example
+#     -------
+#     >>> put_item_field(table, {"id": "ID0"}, "value", "abcd")
+#     >>> put_item_field(table, {"id": "ID0"}, "value", -2.5, overwrite=True, return_object=True)
+#     "abcd"
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     table_keys = get_table_keys(table)
+#     expressions, paths, attribute_names = _field_path_to_expression(field_path, *([v] for v in table_keys.values()))
+#     condition = _key_exists_condition(table_keys, attribute_names)
+#     if not overwrite:
+#         condition += f" AND attribute_not_exists({expressions[0]})"
+#     try:
+#         response = table.update_item(
+#             Key=key,
+#             UpdateExpression=f"SET {expressions[0]} = :new_value",
+#             ExpressionAttributeValues={":new_value": _recursive_convert(new_value, to_decimal=True)},
+#             ExpressionAttributeNames=attribute_names,
+#             ReturnValues="UPDATED_OLD" if return_object else "NONE",  # Return the updated values after setting
+#             ConditionExpression=condition, # only update if the item did exist
+#             )
+#     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+#         raise DynamoDBException(f"The item '{key}' from table '{table.name}' does not exist, or it's field '{paths[0]}' already do")
+#     except ClientError as e:
+#         if e.response["Error"]["Code"] == "ValidationException":
+#             raise DynamoDBException(f"Some part of the field '{paths[0]}' do not exist for item '{key}' from table '{table.name}'")
+#         else:
+#             raise
+#     if not return_object:
+#         return
+#     else:
+#         item = response.get("Attributes")
+#         if item is None:
+#             return None
+#         field_value = _extract_item_field_value(item, field_path)
+#         return _recursive_convert(field_value, to_decimal=False)
 
 
-def extend_array_item_field(
-        table: object,
-        key: dict,
-        field_path: str,
-        value: list,
-        default: list|None = None,
-        return_object: bool=False
-    ) -> list | None:
-    """
-    increment the field of an item at given key.
-    Raise an error if the item or field does not exist,
-    unless default is provided in which case it is initialized to default before.
+# def remove_item_field(
+#         table: object,
+#         key: dict,
+#         field_path: str,
+#         return_object: bool=False
+#     ) -> dict | None:
+#     """
+#     Remove a field from an existing item.
+#     Raise an error if the item or field does not exist.
 
-    Example
-    -------
-    >>> increment_item_field(table, {"id": "ID0"}, "array_field", -2.5)
-    """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
-    kwargs = dict(ConditionExpression=f"attribute_exists({expression})") if default is None else dict()
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"SET {expression} = list_append(if_not_exists({expression}, :default), :new_items)",
-            ExpressionAttributeValues={":new_items": _recursive_convert(value, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
-            ExpressionAttributeNames=attribute_names,
-            ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated value after the insertion
-            **kwargs
-            )
-    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
-        raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
-        else:
-            raise
-    if not return_object:
-        return
-    else:
-        item = response.get("Attributes")
-        if item is None:
-            return None
-        field_value = _extract_item_field_value(item, field_path)
-        return _recursive_convert(field_value, to_decimal=False)
+#     Example
+#     -------
+#     >>> remove_item_field(table, {"id": "ID0"}, "value")
+#     >>> remove_item_field(table, {"id": "ID0"}, ["field", "list_field", 0, "nested"], return_object=True)
+#     {"other-nested": -5}
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+#     try:
+#         response = table.update_item(
+#             Key=key,
+#             UpdateExpression=f"REMOVE {expression}",
+#             ConditionExpression=f"attribute_exists({expression})",  # only update if the item did exist
+#             ExpressionAttributeNames=attribute_names,
+#             ReturnValues="UPDATED_OLD" if return_object else "NONE"  # Returns the removed values
+#             )
+#     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+#         raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
+#     except ClientError as e:
+#         if e.response["Error"]["Code"] == "ValidationException":
+#             raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
+#         else:
+#             raise
+#     if not return_object:
+#         return
+#     else:
+#         item = response.get("Attributes")
+#         if item is None:
+#             return None
+#         field_value = _extract_item_field_value(item, field_path)
+#         return _recursive_convert(field_value, to_decimal=False)
 
 
-def extend_set_item_field(
-        table: object,
-        key: dict,
-        field_path: str,
-        value: set,
-        create_if_missing: bool = False,
-        return_object: bool=False
-    ) -> set | None:
-    """
-    Insert the given values in a set field at given key.
-    Raise an error if the item or field does not exist.
-    If 'return_object' is True, returns the subset of add objects that were not already present.
+# def increment_item_field(
+#         table: object,
+#         key: dict,
+#         field_path: str,
+#         value: int | float,
+#         default: int | float | None = None,
+#         return_object: bool=False
+#     ) -> int | float | None:
+#     """
+#     Increment the field of an item at given key.
+#     If default is provided, missing item or field are created with 'default' as initial value for the field, before increment.
+#     Otherwise raise a KeyError if the item or field does not exist.
 
-    Example
-    -------
-    >>> insert_in_set_item_field(table, {"id": "ID0"}, "alphabet", "d")
-    """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
-    kwargs = dict(ConditionExpression=f"attribute_exists({expression})") if not create_if_missing else dict()
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"ADD {expression} :set_to_add",
-            ExpressionAttributeValues={":set_to_add": _recursive_convert(value, to_decimal=True)},
-            ExpressionAttributeNames=attribute_names,
-            ReturnValues="UPDATED_OLD" if return_object else "NONE",  # Return the updated value after the insertion
-            **kwargs
-            )
-    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
-        raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
-        else:
-            raise
-    if not return_object:
-        return
-    else:
-        item = response.get("Attributes")
-        if create_if_missing and item is None:
-            previous = set()
-        else:
-            field_value = _extract_item_field_value(item, field_path)
-            previous = _recursive_convert(field_value, to_decimal=False)
-        return {v for v in value if v not in previous}
+#     Example
+#     -------
+#     >>> increment_item_field(table, {"id": "ID0"}, "value", -2.5)
+#     >>> increment_item_field(table, {"id": "ID0"}, "value", 8, return_object=True)
+#     3.0
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+#     kwargs = dict(ConditionExpression=f"attribute_exists({expression})") if default is None else dict()
+#     try:
+#         response = table.update_item(
+#             Key=key,
+#             UpdateExpression=f"SET {expression} = if_not_exists({expression}, :default) + :increment_amount",
+#             ExpressionAttributeValues={":increment_amount": _recursive_convert(value, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
+#             ExpressionAttributeNames=attribute_names,
+#             ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated values after the increment
+#             **kwargs
+#         )
+#     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+#         raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
+#     except ClientError as e:
+#         if e.response["Error"]["Code"] == "ValidationException":
+#             raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
+#         else:
+#             raise
+#     if not return_object:
+#         return
+#     else:
+#         item = response.get("Attributes")
+#         if item is None:
+#             return None
+#         field_value = _extract_item_field_value(item, field_path)
+#         return _recursive_convert(field_value, to_decimal=False)
 
 
-def remove_from_set_item_field(
-        table: object,
-        key: dict,
-        field_path: str,
-        value: set,
-        return_object: bool=False
-    ) -> set | None:
-    """
-    Removes the given values from a set field at given key.
-    Raise an error if the item or field does not exists.
-    If 'return_object' is True, returns the subset of removed objects that were present.
+# def extend_array_item_field(
+#         table: object,
+#         key: dict,
+#         field_path: str,
+#         value: list,
+#         default: list|None = None,
+#         return_object: bool=False
+#     ) -> list | None:
+#     """
+#     increment the field of an item at given key.
+#     Raise an error if the item or field does not exist,
+#     unless default is provided in which case it is initialized to default before.
 
-    Example
-    -------
-    >>> delete_from_set_item_field(table, {"id": "ID0"}, "alphabet", "d")
-    """
-    field_path = [field_path] if isinstance(field_path, str) else list(field_path)
-    (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
-    try:
-        response = table.update_item(
-            Key=key,
-            UpdateExpression=f"DELETE {expression} :set_to_delete",
-            ExpressionAttributeValues={":set_to_delete": _recursive_convert(value, to_decimal=True)},
-            ExpressionAttributeNames=attribute_names,
-            ConditionExpression=f"attribute_exists({expression})",  # only update if the field did exist
-            ReturnValues="UPDATED_OLD" if return_object else "NONE"
-            )
-    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
-        raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
-        else:
-            raise
-    if not return_object:
-        return
-    else:
-        item = response.get("Attributes")
-        field_value = _extract_item_field_value(item, field_path)
-        previous = _recursive_convert(field_value, to_decimal=False)
-        if previous is None:
-            previous = set()
-        return {v for v in value if v in previous}
+#     Example
+#     -------
+#     >>> increment_item_field(table, {"id": "ID0"}, "array_field", -2.5)
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+#     kwargs = dict(ConditionExpression=f"attribute_exists({expression})") if default is None else dict()
+#     try:
+#         response = table.update_item(
+#             Key=key,
+#             UpdateExpression=f"SET {expression} = list_append(if_not_exists({expression}, :default), :new_items)",
+#             ExpressionAttributeValues={":new_items": _recursive_convert(value, to_decimal=True), ":default": _recursive_convert(default, to_decimal=True)},
+#             ExpressionAttributeNames=attribute_names,
+#             ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated value after the insertion
+#             **kwargs
+#             )
+#     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+#         raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
+#     except ClientError as e:
+#         if e.response["Error"]["Code"] == "ValidationException":
+#             raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
+#         else:
+#             raise
+#     if not return_object:
+#         return
+#     else:
+#         item = response.get("Attributes")
+#         if item is None:
+#             return None
+#         field_value = _extract_item_field_value(item, field_path)
+#         return _recursive_convert(field_value, to_decimal=False)
+
+
+# def extend_set_item_field(
+#         table: object,
+#         key: dict,
+#         field_path: str,
+#         value: set,
+#         create_if_missing: bool = False,
+#         return_object: bool=False
+#     ) -> set | None:
+#     """
+#     Insert the given values in a set field at given key.
+#     Raise an error if the item or field does not exist.
+#     If 'return_object' is True, returns the subset of add objects that were not already present.
+
+#     Example
+#     -------
+#     >>> insert_in_set_item_field(table, {"id": "ID0"}, "alphabet", "d")
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+#     kwargs = dict(ConditionExpression=f"attribute_exists({expression})") if not create_if_missing else dict()
+#     try:
+#         response = table.update_item(
+#             Key=key,
+#             UpdateExpression=f"ADD {expression} :set_to_add",
+#             ExpressionAttributeValues={":set_to_add": _recursive_convert(value, to_decimal=True)},
+#             ExpressionAttributeNames=attribute_names,
+#             ReturnValues="UPDATED_OLD" if return_object else "NONE",  # Return the updated value after the insertion
+#             **kwargs
+#             )
+#     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+#         raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
+#     except ClientError as e:
+#         if e.response["Error"]["Code"] == "ValidationException":
+#             raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
+#         else:
+#             raise
+#     if not return_object:
+#         return
+#     else:
+#         item = response.get("Attributes")
+#         if create_if_missing and item is None:
+#             previous = set()
+#         else:
+#             field_value = _extract_item_field_value(item, field_path)
+#             previous = _recursive_convert(field_value, to_decimal=False)
+#         return {v for v in value if v not in previous}
+
+
+# def remove_from_set_item_field(
+#         table: object,
+#         key: dict,
+#         field_path: str,
+#         value: set,
+#         return_object: bool=False
+#     ) -> set | None:
+#     """
+#     Removes the given values from a set field at given key.
+#     Raise an error if the item or field does not exists.
+#     If 'return_object' is True, returns the subset of removed objects that were present.
+
+#     Example
+#     -------
+#     >>> delete_from_set_item_field(table, {"id": "ID0"}, "alphabet", "d")
+#     """
+#     field_path = [field_path] if isinstance(field_path, str) else list(field_path)
+#     (expression,), (path,), attribute_names = _field_path_to_expression(field_path)
+#     try:
+#         response = table.update_item(
+#             Key=key,
+#             UpdateExpression=f"DELETE {expression} :set_to_delete",
+#             ExpressionAttributeValues={":set_to_delete": _recursive_convert(value, to_decimal=True)},
+#             ExpressionAttributeNames=attribute_names,
+#             ConditionExpression=f"attribute_exists({expression})",  # only update if the field did exist
+#             ReturnValues="UPDATED_OLD" if return_object else "NONE"
+#             )
+#     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+#         raise DynamoDBException(f"The item '{key}' from table '{table.name}' or it's field '{path}' do not exist")
+#     except ClientError as e:
+#         if e.response["Error"]["Code"] == "ValidationException":
+#             raise DynamoDBException(f"Some part of the field '{path}' do not exist for item '{key}' from table '{table.name}'")
+#         else:
+#             raise
+#     if not return_object:
+#         return
+#     else:
+#         item = response.get("Attributes")
+#         field_value = _extract_item_field_value(item, field_path)
+#         previous = _recursive_convert(field_value, to_decimal=False)
+#         if previous is None:
+#             previous = set()
+#         return {v for v in value if v in previous}
 
 
 if __name__ == "__main__":
