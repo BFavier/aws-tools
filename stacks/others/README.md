@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import load_pem_x509_certificate, Certificate
 from cryptography.hazmat.backends import default_backend
+from urllib.parse import urlparse
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -47,6 +48,8 @@ async def mail_bounce_or_complaint_route(request: Request):
         notification_message = json.loads(body['Message'])
         # Perform actions based on the SNS message
         ...
+        print(notification_message)
+        ...
         return JSONResponse(content={"message": "Notification processed", "details": notification_message})
     else:
         raise HTTPException(404, "invalid request type")
@@ -56,6 +59,8 @@ async def verify_sns_signature(message) -> bool:
     """
     Verify the SNS message signature
     """
+    if not is_valid_cert_url(message["SigningCertURL"]):
+        return False
     decoded_signature = base64.b64decode(message["Signature"])
     cert = await _get_signing_certificate(message["SigningCertURL"])
     public_key = cert.public_key()
@@ -70,6 +75,16 @@ async def verify_sns_signature(message) -> bool:
         return False
     else:
         return True
+
+
+def is_valid_cert_url(cert_url: str) -> bool:
+    """
+    Verify that the SigningCertURL is a valid AWS URL
+    """
+    parsed = urlparse(cert_url)
+    return (parsed.scheme == "https" and
+            parsed.hostname and
+            parsed.hostname.endswith(".amazonaws.com"))
 
 
 async def _get_signing_certificate(cert_url: str) -> Certificate:
@@ -96,4 +111,5 @@ def _get_certificate_string_to_sign(message: dict) -> str:
         if field in message:
             string_to_sign += f"{field}\n{message[field]}\n"
     return string_to_sign
+
 ```
