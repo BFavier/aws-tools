@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Defines a VPC with 3 subnets
+
+Parameters:
+  VpcName:
+    Type: String
+    Description: Prefix used to name resources
+    Default: Network
+  PublicVpc:
+    Type: String
+    Description: Set to 'false' to create a private VPC (with no Internet Gateway)
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    ConstraintDescription: Must be either true or false
+
+Conditions:
+  IsPublicVpc: !Equals
+    - !Ref PublicVpc
+    - 'true'
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: IsPublicVpc
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}InternetGateway
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: IsPublicVpc
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}RouteTable
+  RouteTableGatewayAssociation:
+    Type: AWS::EC2::Route
+    Condition: IsPublicVpc
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/20
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs ''
+      MapPublicIpOnLaunch: !Ref PublicVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}SubnetA
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.16.0/20
+      AvailabilityZone: !Select
+        - '1'
+        - !GetAZs ''
+      MapPublicIpOnLaunch: !Ref PublicVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}SubnetB
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.32.0/20
+      AvailabilityZone: !Select
+        - '2'
+        - !GetAZs ''
+      MapPublicIpOnLaunch: !Ref PublicVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}SubnetC
+  SubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+  SubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+  SubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetC
+      RouteTableId: !Ref RouteTable
+
+Outputs:
+  VpcId:
+    Value: !Ref VPC
+    Export:
+      Name: VpcId
+  SubnetAId:
+    Value: !Ref SubnetA
+    Export:
+      Name: SubnetAId
+  SubnetBId:
+    Value: !Ref SubnetB
+    Export:
+      Name: SubnetBId
+  SubnetCId:
+    Value: !Ref SubnetC
+    Export:
+      Name: SubnetCId

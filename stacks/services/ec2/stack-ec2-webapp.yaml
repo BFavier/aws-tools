@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Runs a docker image by spinning a single ec2 instance. You can customize the env variables that are sent to the docker image in the EC2 UserData startup script below.
+
+Parameters:
+  DockerImage:
+    Type: String
+    Description: The URI of the image to use (from AWS ECR or a public repository).
+  VpcId:
+    Type: String
+    Description: The VPC ID to create the instance in
+  SubnetId:
+    Type: String
+    Description: The ID of the VPC subnet to create the instance in
+  HostedZoneId:
+    Type: String
+    Description: The ID of the Route53 hosted zone to create the CNAME record in.
+  ServiceUrl:
+    Type: String
+    Description: The url at which the webapp is exposed. For example 'www.domain-name.com'. It must match with the HostedZone's domain name ('domain-name.com').
+  ApplicationName:
+    Type: String
+    Description: The prefix used for resource names
+    Default: Webapp
+  InstanceType:
+    Type: String
+    Description: EC2 instance Type
+    Default: t2.micro
+  EnvironmentVariables:
+    Type: String
+    Default: !Sub '-e AWS_DEFAULT_REGION=${AWS::Region} -e AWS_STACK_NAME=${AWS::StackName}'
+    Description: The environment variables to pass to the docker image.
+  CertificateArn:
+    Type: String
+    Description: Optional ARN of the ACM certificate for the hosted zone. If provided, a cloudfront distribution will be placed between DNS record and EC2 instance, to handle https to http conversion.
+    Default: ''
+  SSHKeyName:
+    Type: String
+    Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
+    Default: ''
+
+Conditions:
+  HasSSHKeyName: !Not
+    - !Equals
+      - ''
+      - !Ref SSHKeyName
+  HandleHttps: !Not
+    - !Equals
+      - ''
+      - !Ref CertificateArn
+
+Resources:
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for runners
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - !If
+          - HasSSHKeyName
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: 0.0.0.0/0
+          - !Ref AWS::NoValue
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+  EC2LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ec2/${ApplicationName}
+      RetentionInDays: 30
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub WebappEc2TaskExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - s3:*
+                  - cognito:*
+                  - dynamodb:*
+                  - ecs:RunTask
+                  - sns:Publish
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                  - cloudformation:ListStacks
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      SubnetId: !ImportValue PublicSubnetAId
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      KeyName: !If
+        - HasSSHKeyName
+        - !Ref SSHKeyName
+        - !Ref AWS::NoValue
+      UserData: !Sub |+
+        #!/bin/bash
+        yum update -y
+        # Install CloudWatch Agent
+        yum install amazon-cloudwatch-agent -y
+        # Install and start Docker
+        amazon-linux-extras install docker -y
+        service docker start
+        usermod -a -G docker ec2-user
+        # Pull and run Docker container
+        aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
+        docker pull ${DockerImage}
+        docker run -d --rm --network host ${EnvironmentVariables} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
+      Tags:
+        - Key: Name
+          Value: !Sub ${ApplicationName}Instance
+  CloudFrontOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Condition: HandleHttps
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: CloudFrontOriginRequestPolicy
+        CookiesConfig:
+          CookieBehavior: all
+        HeadersConfig:
+          HeaderBehavior: allViewer
+        QueryStringsConfig:
+          QueryStringBehavior: all
+  CloudFrontCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Condition: HandleHttps
+    Properties:
+      CachePolicyConfig:
+        Name: CloudFrontCachePolicy
+        DefaultTTL: 3600
+        MaxTTL: 86400
+        MinTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: HandleHttps
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Origins:
+          - Id: EC2Origin
+            DomainName: !GetAtt EC2Instance.PublicDnsName
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+        DefaultCacheBehavior:
+          TargetOriginId: EC2Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: !Ref CloudFrontCachePolicy
+          OriginRequestPolicyId: !Ref CloudFrontOriginRequestPolicy
+        ViewerCertificate:
+          AcmCertificateArn: !ImportValue CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Aliases:
+          - !Join
+            - ''
+            - - www.
+              - !ImportValue DomainName
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+  PublicCNAMERecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HandleHttps
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ServiceUrl
+      Type: CNAME
+      TTL: '300'
+      ResourceRecords:
+        - !GetAtt CloudFrontDistribution.DomainName
+  PrivateARecord:
+    Type: AWS::Route53::RecordSet
+    Condition: !Not
+      - HandleHttps
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ServiceUrl
+      Type: A
+      TTL: '300'
+      ResourceRecords:
+        - !GetAtt EC2Instance.LocalIp
+
+Outputs:
+  EC2InstanceId:
+    Value: !Ref EC2Instance
+    Export:
+      Name: EC2InstanceId
+  EC2PrivateIP:
+    Value: !GetAtt EC2Instance.PrivateIp
+    Export:
+      Name: EC2PrivateIP
+  CloudFrontDistributionDomainName:
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: CloudFrontDistributionDomainName

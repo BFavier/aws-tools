@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Defines the route53 hosted zone (for a publicly owned domain name, or a private fictive one) and an ACM certificate
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: Domaine name of the website
+    AllowedPattern: ^[a-z0-9-]+\.[a-z]{2,}$
+    ConstraintDescription: Must be a valid domaine name
+  VPCIds:
+    Type: CommaDelimitedList
+    Description: Leave empty for a public hosted zone, provide the list of VPC IDs to associate for a private hosted zone. They are assumed to be from the same region as the stack.
+    Default: ''
+
+Conditions:
+  IsPrivateZone: !Not
+    - !Equals
+      - !Join
+        - ''
+        - !Ref VPCIds
+      - ''
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: Hosted zone for the domain
+        PrivateZone: !Condition IsPrivateZone
+      VPCs: !If
+        - IsPrivateZone
+        - - VPCId: !Select
+              - 0
+              - !Ref VPCIds
+            VPCRegion: !Ref AWS::Region
+        - !Ref AWS::NoValue
+      HostedZoneTags:
+        - Key: Name
+          Value: !Ref DomainName
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: IsPublicZone
+    Properties:
+      DomainName: !Sub '*.${DomainName}'
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Sub '*.${DomainName}'
+          HostedZoneId: !Ref HostedZone
+      Tags:
+        - Key: Name
+          Value: SSLCertificate
+
+Outputs:
+  CertificateArn:
+    Value: !Ref Certificate
+    Condition: IsPublicZone
+    Export:
+      Name: CertificateArn
+  DomainName:
+    Value: !Ref DomainName
+    Export:
+      Name: DomainName
+  HostedZoneId:
+    Value: !Ref HostedZone
+    Export:
+      Name: HostedZoneId

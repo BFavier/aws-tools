@@ -1,11 +1,18 @@
-# 1) Domain stack
+# AWS Cloudformation stacks
 
-This stack creates the route53 hosted zone and the SSL certificates
+This repository contains some examples of AWS cloudformation stacks that can be used in nested stacks or modified.
 
-⚠️ Manual actions are required. Verify the value of the "name servers": In AWS console > "Route 53" service > "Domain" > "Registered domains" > select your domain name > "Actions" > "Edit name servers". You should put in the same values as in your "Route 53" > "Hosted zones" > select your domain name > the "Route traffic to" values for the DNS record of type NS.
+## 1) Using the stacks
 
-You can check the progress of your DNS records propagation with [whatsmydns](https://www.whatsmydns.net/) or with the nslookup command line tool.
+You will first want to create an s3 bucket to store these stacks.
+Then clone the repository:
 
-# 2) Network stack
+```
+git clone https://github.com/BFavier/aws-tools.git
+```
 
-This stack defines a VPC, an internet gateway and a route table.
+Finally copy the stacks to the bucket (remember to change the name of the bucket here below)
+
+```
+aws s3 sync ./aws-tools/stacks/ s3://my-stack-bucket
+```

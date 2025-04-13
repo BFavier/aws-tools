@@ -1,0 +1,1 @@
+Creates a fargate cluster to run some tasks without hosting ec2 machines
