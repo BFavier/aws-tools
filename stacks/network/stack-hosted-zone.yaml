@@ -13,12 +13,11 @@ Parameters:
     Default: ''
 
 Conditions:
-  IsPrivateZone: !Not
-    - !Equals
-      - !Join
-        - ''
-        - !Ref VPCIds
+  IsPublicZone: !Equals
+    - !Join
       - ''
+      - !Ref VPCIds
+    - ''
 
 Resources:
   HostedZone:

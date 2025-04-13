@@ -46,27 +46,33 @@ Resources:
   PrivateNetwork:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub s3://${StackBucketName}/network/stack-vpc.yaml
+      TemplateURL: !Sub https://s3.amazonaws.com/${StackBucketName}/network/stack-vpc.yaml
       Parameters:
         VpcName: PrivateNetwork
         PublicVpc: 'false'
   PrivateHostedZone:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub s3://${StackBucketName}/network/stack-hosted-zone.yaml
+      TemplateURL: !Sub https://s3.amazonaws.com/${StackBucketName}/network/stack-hosted-zone.yaml
       Parameters:
         DomainName: private-domain.com
-        VPCIds: !GetAtt PrivateNetwork.VpcId
+        VPCIds:
+          !GetAtt
+          - PrivateNetwork
+          - Outputs.VpcId
 
 Outputs:
-  HostedZoneId:
-    Value: !GetAtt PrivateHostedZone.HostedZoneId
+  PrivateHostedZoneId:
+    Value:
+      !GetAtt
+      - PrivateHostedZone
+      - Outputs.HostedZoneId
     Export:
-      Name: HostedZoneId
+      Name: PrivateHostedZoneId
 ```
 
 Which you can start with
 
 ```bash
-aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StackBucketName,ParameterValue=${MY_STACK_BUCKET}
+aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StackBucketName,ParameterValue=${MY_STACK_BUCKET} --stack-name test-stack
 ```
