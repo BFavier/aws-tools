@@ -1,6 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation template to create an EKS cluster. You can customize the WebappRunnerRole or add more roles. Just make sure to have a PodIdentity Association for each role.
 
+Parameters:
+  KubernetesClusterName:
+      Type: String
+      Description: The name of the Kubernetes cluster to add the node group to
+
 Resources:
   ClusterAutoscalerRole:
     Type: AWS::IAM::Role
@@ -45,7 +50,7 @@ Resources:
   ClusterAutoscalerPodIdentityAssociation:
     Type: AWS::EKS::PodIdentityAssociation
     Properties:
-      ClusterName: !ImportValue KubernetesCluster
+      ClusterName: !Ref KubernetesClusterName
       Namespace: cluster-autoscaler-namespace
       ServiceAccount: cluster-autoscaler-service-account
       RoleArn: !GetAtt ClusterAutoscalerRole.Arn
@@ -88,7 +93,7 @@ Resources:
   WebappPodIdentityAssociation:
     Type: AWS::EKS::PodIdentityAssociation
     Properties:
-      ClusterName: !ImportValue KubernetesCluster
+      ClusterName: !Ref KubernetesClusterName
       Namespace: webapp-namespace
       ServiceAccount: webapp-service-account
       RoleArn: !GetAtt WebappRunnerRole.Arn

@@ -1,10 +1,21 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Defines the webapp resources
+Transform: AWS::LanguageExtensions
+Description: Defines a service that runs on an ECS cluster, with a load balancer in front
 
 Parameters:
   DockerImageURI:
     Type: String
     Description: The URI of the ECR image to use
+  VpcId:
+    Type: String
+    Description: ID of the VPC to start the instances in
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: IDs of the subnets to start the instances is
+  EnvironmentVariables:
+    Type: CommaDelimitedList
+    Description: The environment variables to add to the worker nodes
+    Default: !Sub 'AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}''
   InstanceType:
     Type: String
     Description: Instance Type
@@ -50,10 +61,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: !Sub WebappLoadBalancer
-      Subnets:
-        - !ImportValue PublicSubnetAId
-        - !ImportValue PublicSubnetBId
-        - !ImportValue PublicSubnetCId
+      Subnets: !Ref SubnetIds
       SecurityGroups:
         - !Ref LoadBalancerSecurityGroup
       Scheme: internet-facing
@@ -65,7 +73,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: WebappTargetGroup
-      VpcId: !ImportValue PublicVpcId
+      VpcId: !Ref VpcId
       Port: 80
       Protocol: HTTP
       TargetType: instance
@@ -114,7 +122,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for Application Load Balancer
-      VpcId: !ImportValue PublicVpcId
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -131,7 +139,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for runners
-      VpcId: !ImportValue PublicVpcId
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - !If
           - HasSSHKeyName
@@ -174,10 +182,7 @@ Resources:
       MinSize: !Ref MinInstanceCount
       MaxSize: !Ref MaxInstanceCount
       DesiredCapacity: !Ref InitialInstanceCount
-      VPCZoneIdentifier:
-        - !ImportValue PublicSubnetAId
-        - !ImportValue PublicSubnetBId
-        - !ImportValue PublicSubnetCId
+      VPCZoneIdentifier: !Ref SubnetIds
       Tags:
         - Key: Name
           Value: !Sub WebappInstance
@@ -240,14 +245,11 @@ Resources:
         - Name: !Sub WebappTaskContainer
           Image: !Ref DockerImageURI
           Environment:
-            - Name: AWS_DEFAULT_REGION
-              Value: !Ref AWS::Region
-            - Name: COGNITO_USER_POOL_ID
-              Value: !ImportValue CognitoUserPoolId
-            - Name: COGNITO_USER_POOL_CLIENT_ID
-              Value: !ImportValue CognitoUserPoolClientId
-            - Name: DOMAIN_NAME
-              Value: !ImportValue DomainName
+            'Fn::ForEach::Env':
+              - EnvVar
+              - !Ref EnvironmentVariables
+              - Name: !Select [0, !Split ['=', !Ref EnvVar]]
+                Value: !Select [1, !Split ['=', !Ref EnvVar]]
           Cpu: !Ref cpuUnits
           Memory: !Ref memoryMb
           Essential: true

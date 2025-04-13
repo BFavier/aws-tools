@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Defines a VPC with 3 subnets
+Description: Defines a VPC with subnets in 3 availability zones
 
 Parameters:
   VpcName:
@@ -119,3 +119,9 @@ Outputs:
     Value: !Ref SubnetB
   SubnetCId:
     Value: !Ref SubnetC
+  SubnetIds:
+    Value: !Join
+      - ', '
+      - - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC

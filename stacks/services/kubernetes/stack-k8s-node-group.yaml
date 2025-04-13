@@ -2,6 +2,21 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation template to create an EKS cluster
 
 Parameters:
+  KubernetesVersion:
+    Type: String
+    Description: The version of Kubernetes
+  KubernetesClusterName:
+    Type: String
+    Description: The name of the Kubernetes cluster to add the node group to
+  KubernetesNodeRoleArn:
+    Type: String
+    Description: The ARN of the Node role
+  KubernetesNodeSecurityGroupId:
+    Type: String
+    Description: The ID of the Node role
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: The ID of the subnets to create the nodes in
   NodeInstanceType:
     Type: String
     Default: t2.micro
@@ -38,11 +53,9 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !Sub
-          - '{{resolve:ssm:/aws/service/eks/optimized-ami/${KubernetesVersion}/amazon-linux-2/recommended/image_id}}'
-          - KubernetesVersion: !ImportValue KubernetesVersion
+        ImageId: !Sub '{{resolve:ssm:/aws/service/eks/optimized-ami/${KubernetesVersion}/amazon-linux-2/recommended/image_id}}'
         SecurityGroupIds:
-          - !ImportValue KubernetesNodeSecurityGroup
+          - !Ref KubernetesNodeSecurityGroupId
         KeyName: !If
           - HasSSHKeyName
           - !Ref SSHKeyName
@@ -59,20 +72,16 @@ Resources:
               - Key: Name
                 Value: !Sub ${AWS::StackName}
         UserData: !Sub |+
-            - #!/bin/bash
-              set -ex
-              /etc/eks/bootstrap.sh ${ClusterName} --use-max-pods false
-            - ClusterName: !ImportValue KubernetesCluster
+          #!/bin/bash
+          set -ex
+          /etc/eks/bootstrap.sh ${KubernetesClusterName} --use-max-pods false
   EKSNodeGroup:
     Type: AWS::EKS::Nodegroup
     Properties:
       NodegroupName: !Sub ${AWS::StackName}
-      ClusterName: !ImportValue KubernetesCluster
-      NodeRole: !ImportValue KubernetesNodeRoleArn
-      Subnets:
-        - !ImportValue PublicSubnetAId
-        - !ImportValue PublicSubnetBId
-        - !ImportValue PublicSubnetCId
+      ClusterName: !Ref KubernetesClusterName
+      NodeRole: !Sub ${KubernetesNodeRoleArn}
+      Subnets: !Ref SubnetIds
       ScalingConfig:
         MinSize: !Ref MinNodeCount
         MaxSize: !Ref MaxNodeCount

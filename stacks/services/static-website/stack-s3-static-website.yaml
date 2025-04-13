@@ -10,10 +10,7 @@ Resources:
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Join
-        - ''
-        - - www.
-          - !ImportValue DomainName
+      BucketName: !Sub www.${DomainName}
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -42,11 +39,7 @@ Resources:
       DistributionConfig:
         Origins:
           - Id: S3Origin
-            DomainName: !Join
-              - ''
-              - - www.
-                - !ImportValue DomainName
-                - .s3.amazonaws.com
+            DomainName: !Sub www.${DomainName}.s3.amazonaws.com
             OriginPath: ''
             CustomOriginConfig:
               HTTPPort: 80
@@ -73,10 +66,7 @@ Resources:
         PriceClass: PriceClass_100
         DefaultRootObject: index.html
         Aliases:
-          - !Join
-            - ''
-            - - www.
-              - !ImportValue DomainName
+          - !Sub www.${DomainName}
   USCertificateRequestCustomResource:
     Type: Custom::RequestCertificate
     Properties:

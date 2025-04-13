@@ -123,11 +123,11 @@ Resources:
       ConfigurationValues: '{"env":{"ENABLE_PREFIX_DELEGATION":"true"}}'
 
 Outputs:
-  KubernetesCluster:
+  KubernetesClusterName:
     Value: !Ref EKSCluster
   KubernetesNodeRoleArn:
     Value: !GetAtt NodeInstanceRole.Arn
-  KubernetesNodeSecurityGroup:
+  KubernetesNodeSecurityGroupId:
     Value: !Ref NodeSecurityGroup
   KubernetesVersion:
     Value: !Ref KubernetesVersion
