@@ -24,16 +24,13 @@ Resources:
     Type: AWS::Route53::HostedZone
     Properties:
       Name: !Ref DomainName
-      HostedZoneConfig:
-        Comment: Hosted zone for the domain
-        PrivateZone: !Condition IsPrivateZone
       VPCs: !If
-        - IsPrivateZone
+        - IsPublicZone
+        - !Ref AWS::NoValue
         - - VPCId: !Select
               - 0
               - !Ref VPCIds
             VPCRegion: !Ref AWS::Region
-        - !Ref AWS::NoValue
       HostedZoneTags:
         - Key: Name
           Value: !Ref DomainName
