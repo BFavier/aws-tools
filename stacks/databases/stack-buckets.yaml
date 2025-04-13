@@ -44,5 +44,3 @@ Outputs:
       - BucketVersioning
       - !Ref BucketVersioned
       - !Ref BucketUnversioned
-    Export:
-      Name: BucketName

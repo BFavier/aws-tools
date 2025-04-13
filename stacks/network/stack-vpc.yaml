@@ -113,17 +113,9 @@ Resources:
 Outputs:
   VpcId:
     Value: !Ref VPC
-    Export:
-      Name: VpcId
   SubnetAId:
     Value: !Ref SubnetA
-    Export:
-      Name: SubnetAId
   SubnetBId:
     Value: !Ref SubnetB
-    Export:
-      Name: SubnetBId
   SubnetCId:
     Value: !Ref SubnetC
-    Export:
-      Name: SubnetCId

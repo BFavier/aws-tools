@@ -124,17 +124,9 @@ Resources:
 Outputs:
   KubernetesCluster:
     Value: !Ref EKSCluster
-    Export:
-      Name: KubernetesCluster
   KubernetesNodeRoleArn:
     Value: !GetAtt NodeInstanceRole.Arn
-    Export:
-      Name: KubernetesNodeRoleArn
   KubernetesNodeSecurityGroup:
     Value: !Ref NodeSecurityGroup
-    Export:
-      Name: KubernetesNodeSecurityGroup
   KubernetesVersion:
     Value: !Ref KubernetesVersion
-    Export:
-      Name: KubernetesVersion

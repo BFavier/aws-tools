@@ -55,13 +55,7 @@ Outputs:
   CertificateArn:
     Value: !Ref Certificate
     Condition: IsPublicZone
-    Export:
-      Name: CertificateArn
   DomainName:
     Value: !Ref DomainName
-    Export:
-      Name: DomainName
   HostedZoneId:
     Value: !Ref HostedZone
-    Export:
-      Name: HostedZoneId

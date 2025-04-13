@@ -71,13 +71,7 @@ Resources:
 Outputs:
   TaskSecurityGroupId:
     Value: !Ref TaskSecurityGroup
-    Export:
-      Name: TaskSecurityGroupId
   TasksClusterId:
     Value: !Ref TasksCluster
-    Export:
-      Name: TasksClusterId
   TaskDefinitionId:
     Value: !Ref TaskDefinition
-    Export:
-      Name: TaskDefinitionId

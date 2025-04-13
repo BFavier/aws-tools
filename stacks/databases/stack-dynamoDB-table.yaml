@@ -61,5 +61,3 @@ Resources:
 Outputs:
   TableName:
     Value: !Ref Table
-    Export:
-      Name: TableName

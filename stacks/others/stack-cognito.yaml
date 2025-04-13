@@ -118,7 +118,7 @@ Resources:
                         'To reset your password, please follow this link:<br>'
                         f'https://www.{domain_name}/authentication/reset-forgot-password.html?{args}<br>'
                         'If you did not request a password reset, please ignore this email.'
-                    )'
+                    )
                 elif event['triggerSource'] in ('CustomMessage_SignUp', 'CustomMessage_ResendCode'):
                     event['response']['emailSubject'] = f'Confirm your {domain_name} account'
                     event['response']['emailMessage'] = (
@@ -192,9 +192,5 @@ Resources:
 Outputs:
   CognitoUserPoolId:
     Value: !Ref CognitoUserPool
-    Export:
-      Name: CognitoUserPoolId
   CognitoUserPoolClientId:
     Value: !Ref CognitoUserPoolClient
-    Export:
-      Name: CognitoUserPoolClientId

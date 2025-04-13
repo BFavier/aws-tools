@@ -96,9 +96,5 @@ Resources:
 Outputs:
   ClusterAutoscalerRoleArn:
     Value: !GetAtt ClusterAutoscalerRole.Arn
-    Export:
-      Name: ClusterAutoscalerRoleArn
   WebappRunnerRoleArn:
     Value: !GetAtt WebappRunnerRole.Arn
-    Export:
-      Name: WebappRunnerRoleArn
