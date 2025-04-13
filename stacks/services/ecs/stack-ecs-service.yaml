@@ -23,14 +23,18 @@ Parameters:
     AllowedValues:
       - t2.micro
     ConstraintDescription: Must be one of the valid instance specified in the stack parameters
-  cpuUnits:
+  CpuUnits:
     Type: Number
     Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
     Default: '512'
-  memoryMb:
+  MemoryMb:
     Type: Number
     Description: Memory resources allocated to each docker container running the service (in MB)
     Default: '512'
+  DiskSpace:
+    Type: Number
+    Description: Disk space in gB
+    Default: 20
   InitialInstanceCount:
     Type: Number
     Description: Initial number of instances to boot up at stack deployment
@@ -250,8 +254,8 @@ Resources:
               - !Ref EnvironmentVariables
               - Name: !Select [0, !Split ['=', !Ref EnvVar]]
                 Value: !Select [1, !Split ['=', !Ref EnvVar]]
-          Cpu: !Ref cpuUnits
-          Memory: !Ref memoryMb
+          Cpu: !Ref CpuUnits
+          Memory: !Ref MemoryMb
           Essential: true
           PortMappings:
             - ContainerPort: 80
@@ -261,6 +265,8 @@ Resources:
               awslogs-group: !Ref WebappECSLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Sub WebappTaskContainer
+      EphemeralStorage:
+        SizeInGiB: !Ref DiskSpace
       RequiresCompatibilities:
         - EC2
       NetworkMode: host

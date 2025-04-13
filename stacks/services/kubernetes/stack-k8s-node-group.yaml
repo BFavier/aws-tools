@@ -21,7 +21,7 @@ Parameters:
     Type: String
     Default: t2.micro
     Description: EC2 instance type for the worker nodes
-  NodeDiskSize:
+  NodeDiskSpace:
     Type: Number
     Default: '20'
     Description: The disk space of the nodes in gB
@@ -64,7 +64,7 @@ Resources:
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
             Ebs:
-              VolumeSize: !Ref NodeDiskSize
+              VolumeSize: !Ref NodeDiskSpace
               VolumeType: gp2
         TagSpecifications:
           - ResourceType: instance

@@ -26,6 +26,10 @@ Parameters:
     Type: String
     Description: EC2 instance Type
     Default: t2.micro
+  DiskSpace:
+    Type: Number
+    Description: Disk space in gB
+    Default: '20'
   EnvironmentVariables:
     Type: CommaDelimitedList
     Default: !Sub 'AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}'
@@ -123,6 +127,12 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref DiskSpace
+            VolumeType: gp3
+            DeleteOnTermination: true
       SubnetId: !Ref SubnetId
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
