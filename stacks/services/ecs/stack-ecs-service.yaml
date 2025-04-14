@@ -33,7 +33,7 @@ Parameters:
   DiskSpace:
     Type: Number
     Description: Disk space in gB
-    Default: 20
+    Default: '20'
   InitialInstanceCount:
     Type: Number
     Description: Initial number of instances to boot up at stack deployment
@@ -58,6 +58,9 @@ Parameters:
     Type: String
     Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
     Default: 'default-ssh-key'
+
+Conditions:
+  HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
 
 Resources:
   WebappLoadBalancer:
@@ -379,9 +382,3 @@ Resources:
       TTL: '300'
       ResourceRecords:
         - !GetAtt WebappLoadBalancer.DNSName
-
-Conditions:
-  HasSSHKeyName: !Not
-    - !Equals
-      - ''
-      - !Ref SSHKeyName

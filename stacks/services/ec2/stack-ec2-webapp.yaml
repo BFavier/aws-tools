@@ -43,14 +43,8 @@ Parameters:
     Default: 'default-ssh-key'
 
 Conditions:
-  HasSSHKeyName: !Not
-    - !Equals
-      - ''
-      - !Ref SSHKeyName
-  HandleHttps: !Not
-    - !Equals
-      - ''
-      - !Ref CertificateArn
+  HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
+  HandleHttps: !Not [!Equals ['', !Ref CertificateArn]]
 
 Resources:
   EC2SecurityGroup:
