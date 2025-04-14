@@ -135,20 +135,21 @@ Resources:
         - HasSSHKeyName
         - !Ref SSHKeyName
         - !Ref AWS::NoValue
-      UserData: !Sub |+
-        #!/bin/bash
-        yum update -y
-        # Install CloudWatch Agent
-        yum install amazon-cloudwatch-agent -y
-        # Install and start Docker
-        amazon-linux-extras install docker -y
-        service docker start
-        usermod -a -G docker ec2-user
-        # Pull and run Docker container
-        aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
-        docker pull ${DockerImage}
-        docker run -d --rm --network host ${EnvironmentVariables} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
-
+      UserData:
+        Fn::Base64:
+          !Sub |+
+            #!/bin/bash
+            yum update -y
+            # Install CloudWatch Agent
+            yum install amazon-cloudwatch-agent -y
+            # Install and start Docker
+            amazon-linux-extras install docker -y
+            service docker start
+            usermod -a -G docker ec2-user
+            # Pull and run Docker container
+            aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
+            docker pull ${DockerImage}
+            docker run -d --rm --network host ${EnvironmentVariables} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
       Tags:
         - Key: Name
           Value: !Sub ${ApplicationName}Instance
@@ -238,7 +239,7 @@ Resources:
       Type: A
       TTL: '300'
       ResourceRecords:
-        - !GetAtt EC2Instance.LocalIp
+        - !GetAtt EC2Instance.PrivateIp
 
 Outputs:
   EC2InstanceId:
