@@ -1,5 +1,4 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::LanguageExtensions
 Description: Defines a service that runs on an ECS cluster, with a load balancer in front
 
 Parameters:
@@ -14,8 +13,8 @@ Parameters:
     Description: IDs of the subnets to start the instances is
   EnvironmentVariables:
     Type: CommaDelimitedList
-    Description: 'The environment variables to add to the worker nodes. Example: !Sub "AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}"'
-    Default: ''
+    Description: 'The environment variables to add to the worker nodes, as a JSON string. Example: !Sub ''[{"Name": "AWS_DEFAULT_REGION", "Value": "${AWS::Region}"}, {"Name": "AWS_STACK_NAME", "Value": "${AWS::StackName}"}]'''
+    Default: '[]'
   InstanceType:
     Type: String
     Description: Instance Type
@@ -248,12 +247,7 @@ Resources:
       ContainerDefinitions:
         - Name: !Sub WebappTaskContainer
           Image: !Ref DockerImageURI
-          Environment:
-            'Fn::ForEach::Env':
-              - EnvVar
-              - !Ref EnvironmentVariables
-              - Name: !Select [0, !Split ['=', !Ref EnvVar]]
-                Value: !Select [1, !Split ['=', !Ref EnvVar]]
+          Environment: !Ref EnvironmentVariables
           Cpu: !Ref CpuUnits
           Memory: !Ref MemoryMb
           Essential: true

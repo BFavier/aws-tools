@@ -1,5 +1,4 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::LanguageExtensions
 Description: Runs a service on a docker image by spinning a single ec2 instance.
 
 Parameters:
@@ -31,9 +30,9 @@ Parameters:
     Description: Disk space in gB
     Default: '20'
   EnvironmentVariables:
-    Type: CommaDelimitedList
+    Type: String
     Default: ''
-    Description: 'The environment variables to pass to the docker image. Example: !Sub "AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}"'
+    Description: 'The environment variables to pass to the docker image. Example: !Sub "-e AWS_DEFAULT_REGION=${AWS::Region} -e AWS_STACK_NAME=${AWS::StackName}"'
   CertificateArn:
     Type: String
     Description: Optional ARN of the ACM certificate for the hosted zone. If provided, a cloudfront distribution will be placed between DNS record and EC2 instance, to handle https to http conversion.
@@ -141,26 +140,19 @@ Resources:
         - HasSSHKeyName
         - !Ref SSHKeyName
         - !Ref AWS::NoValue
-      UserData: !Sub
-        - |+
-          #!/bin/bash
-          yum update -y
-          # Install CloudWatch Agent
-          yum install amazon-cloudwatch-agent -y
-          # Install and start Docker
-          amazon-linux-extras install docker -y
-          service docker start
-          usermod -a -G docker ec2-user
-          # Pull and run Docker container
-          aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
-          docker pull ${DockerImage}
-          docker run -d --rm --network host ${EnvVars} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
-        - EnvVars: !Join
-          - ' '
-          - 'Fn::ForEach::Env':
-            - EnvVar
-            - !Ref EnvironmentVariables
-            - !Sub '-e ${EnvVar}'
+      UserData: !Sub |+
+        #!/bin/bash
+        yum update -y
+        # Install CloudWatch Agent
+        yum install amazon-cloudwatch-agent -y
+        # Install and start Docker
+        amazon-linux-extras install docker -y
+        service docker start
+        usermod -a -G docker ec2-user
+        # Pull and run Docker container
+        aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
+        docker pull ${DockerImage}
+        docker run -d --rm --network host ${EnvironmentVariables} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
 
       Tags:
         - Key: Name
