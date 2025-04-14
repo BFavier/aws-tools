@@ -14,8 +14,8 @@ Parameters:
     Description: IDs of the subnets to start the instances is
   EnvironmentVariables:
     Type: CommaDelimitedList
-    Description: The environment variables to add to the worker nodes
-    Default: !Sub 'AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}''
+    Description: 'The environment variables to add to the worker nodes. Example: !Sub "AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}"'
+    Default: ''
   InstanceType:
     Type: String
     Description: Instance Type

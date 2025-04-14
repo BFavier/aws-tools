@@ -32,8 +32,8 @@ Parameters:
     Default: '20'
   EnvironmentVariables:
     Type: CommaDelimitedList
-    Default: !Sub 'AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}'
-    Description: The environment variables to pass to the docker image.
+    Default: ''
+    Description: 'The environment variables to pass to the docker image. Example: !Sub "AWS_DEFAULT_REGION=${AWS::Region}, AWS_STACK_NAME=${AWS::StackName}"'
   CertificateArn:
     Type: String
     Description: Optional ARN of the ACM certificate for the hosted zone. If provided, a cloudfront distribution will be placed between DNS record and EC2 instance, to handle https to http conversion.
