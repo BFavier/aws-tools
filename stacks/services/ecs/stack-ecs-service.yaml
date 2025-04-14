@@ -58,7 +58,7 @@ Parameters:
   SSHKeyName:
     Type: String
     Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
-    Default: ''
+    Default: 'default-ssh-key'
 
 Resources:
   WebappLoadBalancer:
