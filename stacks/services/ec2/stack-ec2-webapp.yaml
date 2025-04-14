@@ -45,6 +45,7 @@ Parameters:
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
   HandleHttps: !Not [!Equals ['', !Ref CertificateArn]]
+  NotHandleHttps: !Equals ['', !Ref CertificateArn]
 
 Resources:
   EC2SecurityGroup:
@@ -230,8 +231,7 @@ Resources:
         - !GetAtt CloudFrontDistribution.DomainName
   PrivateARecord:
     Type: AWS::Route53::RecordSet
-    Condition: !Not
-      - HandleHttps
+    Condition: NotHandleHttps
     Properties:
       HostedZoneId: !Ref HostedZoneId
       Name: !Ref ServiceUrl
