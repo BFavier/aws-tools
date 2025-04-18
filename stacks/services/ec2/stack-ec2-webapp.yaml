@@ -16,11 +16,8 @@ Parameters:
     Description: The ID of the Route53 hosted zone to create the CNAME record in.
   ServiceUrl:
     Type: String
-    Description: The url at which the webapp is exposed. For example 'www.domain-name.com'. It must match with the HostedZone's domain name ('domain-name.com').
-  ApplicationName:
-    Type: String
-    Description: The prefix used for resource names
-    Default: Webapp
+    Description: The url at which the webapp is exposed. For example 'www.domain-name.com'. It must match with the HostedZone's domain name (here 'domain-name.com').
+
   InstanceType:
     Type: String
     Description: EC2 instance Type
@@ -35,17 +32,22 @@ Parameters:
     Description: 'The environment variables to pass to the docker image. Example: !Sub "-e AWS_DEFAULT_REGION=${AWS::Region} -e AWS_STACK_NAME=${AWS::StackName}"'
   CertificateArn:
     Type: String
-    Description: Optional ARN of the ACM certificate for the hosted zone. If provided, a cloudfront distribution will be placed between DNS record and EC2 instance, to handle https to http conversion.
+    Description: Optional ARN of the ACM certificate for the hosted zone. If provided, a cloudfront distribution will be placed between DNS record and EC2 instance, to handle https to http conversion. An A record to the private IP will be created otherwise.
+    Default: ''
+  RolePolicyArn:
+    Type: String
+    Description: The Arn of an AWS::IAM::ManagedPolicy object that will be used to create the role EC2 endorses. Or an empty string for default rights.
     Default: ''
   SSHKeyName:
     Type: String
-    Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
-    Default: 'default-ssh-key'
+    Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair (ssh port will be closed).
+    Default: ''
 
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
   HandleHttps: !Not [!Equals ['', !Ref CertificateArn]]
   NotHandleHttps: !Equals ['', !Ref CertificateArn]
+  NotHasPolicy: !Equals ['', !Ref RolePolicyArn]
 
 Resources:
   EC2SecurityGroup:
@@ -65,14 +67,36 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
         - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /ec2/${ApplicationName}
+      LogGroupName: !Sub /ec2/${AWS::StackName}
       RetentionInDays: 30
+  DefaultPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: NotHasPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AWS::StackName}-DefaultPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - ecr:GetAuthorizationToken
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+            Resource: "*"
   EC2InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -87,30 +111,10 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
-      Policies:
-        - PolicyName: !Sub WebappEc2TaskExecutionPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - ecr:GetAuthorizationToken
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchGetImage
-                  - s3:*
-                  - cognito:*
-                  - dynamodb:*
-                  - ecs:RunTask
-                  - sns:Publish
-                  - ses:SendEmail
-                  - ses:SendRawEmail
-                  - cloudformation:ListStacks
-                  - cloudformation:DescribeStacks
-                Resource: '*'
+      ManagedPolicyArns: !If
+        - NotHasPolicy
+        - - !Ref DefaultPolicy
+        - !Ref RolePolicyArn
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -135,9 +139,12 @@ Resources:
         - HasSSHKeyName
         - !Ref SSHKeyName
         - !Ref AWS::NoValue
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
       UserData:
         Fn::Base64:
-          !Sub |+
+          !Sub |
             #!/bin/bash
             yum update -y
             # Install CloudWatch Agent
@@ -152,7 +159,7 @@ Resources:
             docker run -d --rm --network host ${EnvironmentVariables} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
       Tags:
         - Key: Name
-          Value: !Sub ${ApplicationName}Instance
+          Value: !Sub ${AWS::StackName}-Instance
   CloudFrontOriginRequestPolicy:
     Type: AWS::CloudFront::OriginRequestPolicy
     Condition: HandleHttps

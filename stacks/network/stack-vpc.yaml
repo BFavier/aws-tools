@@ -2,25 +2,29 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Defines a VPC with subnets in 3 availability zones
 
 Parameters:
-  VpcName:
+  
+  ElastcIp:
     Type: String
-    Description: Prefix used to name resources
-    Default: Network
-  PublicVpc:
-    Type: String
-    Description: Set to 'false' to create a private VPC (with no Internet Gateway)
+    Description: Whether to create a static IP address for the VPC. If 'true', a static IP address will be created. It costs $0.005 per hour (~$3/month).
+    Default: 'false'
     AllowedValues:
       - 'true'
       - 'false'
-    Default: 'true'
-    ConstraintDescription: Must be either true or false
+    ConstraintDescription: Must be either 'true' or 'false'
+
 
 Conditions:
-  IsPublicVpc: !Equals
-    - !Ref PublicVpc
-    - 'true'
+  CreateElasticIp: !Equals [!Ref ElastcIp, 'true']
 
 Resources:
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    Condition: CreateElasticIp
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ElasticIp
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -29,99 +33,145 @@ Resources:
       EnableDnsHostnames: 'true'
       Tags:
         - Key: Name
-          Value: !Ref VpcName
+          Value: !Ref AWS::StackName
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-    Condition: IsPublicVpc
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub ${VpcName}InternetGateway
+          Value: !Sub ${AWS::StackName}-InternetGateway
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
-    Condition: IsPublicVpc
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
-  RouteTable:
+  PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${VpcName}RouteTable
-  RouteTableGatewayAssociation:
+          Value: !Sub ${AWS::StackName}-RouteTable
+  PublicRouteTableGatewayAssociation:
     Type: AWS::EC2::Route
-    Condition: IsPublicVpc
     DependsOn: AttachGateway
     Properties:
-      RouteTableId: !Ref RouteTable
+      RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-  SubnetA:
+  PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: true
       CidrBlock: 10.0.0.0/20
-      AvailabilityZone: !Select
-        - '0'
-        - !GetAZs ''
-      MapPublicIpOnLaunch: !Ref PublicVpc
+      AvailabilityZone: !Select ['0', !GetAZs '']
+      VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${VpcName}SubnetA
-  SubnetB:
+          Value: !Sub ${AWS::StackName}-PublicSubnetA
+  PublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: true
       CidrBlock: 10.0.16.0/20
-      AvailabilityZone: !Select
-        - '1'
-        - !GetAZs ''
-      MapPublicIpOnLaunch: !Ref PublicVpc
+      AvailabilityZone: !Select ['1', !GetAZs '']
+      VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${VpcName}SubnetB
-  SubnetC:
+          Value: !Sub ${AWS::StackName}-PublicSubnetB
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.32.0/20
+      AvailabilityZone: !Select ['2', !GetAZs '']
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicSubnetC
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetC
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateRouteTable
+  PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.32.0/20
-      AvailabilityZone: !Select
-        - '2'
-        - !GetAZs ''
-      MapPublicIpOnLaunch: !Ref PublicVpc
+      CidrBlock: 10.0.48.0/20
+      AvailabilityZone: !Select ['0', !GetAZs '']
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${VpcName}SubnetC
-  SubnetARouteTableAssociation:
+          Value: !Sub ${AWS::StackName}-PrivateSubnetA
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.64.0/20
+      AvailabilityZone: !Select ['1', !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnetB
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.80.0/20
+      AvailabilityZone: !Select ['2', !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnetC
+  PrivateSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetA
-      RouteTableId: !Ref RouteTable
-  SubnetBRouteTableAssociation:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetB
-      RouteTableId: !Ref RouteTable
-  SubnetCRouteTableAssociation:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnetCRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetC
-      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref PrivateSubnetC
+      RouteTableId: !Ref PrivateRouteTable
 
 Outputs:
+  ElasticIp:
+    Condition: CreateElasticIp
+    Value: !GetAtt [ElasticIp, PublicIp]
   VpcId:
     Value: !Ref VPC
-  SubnetAId:
-    Value: !Ref SubnetA
-  SubnetBId:
-    Value: !Ref SubnetB
-  SubnetCId:
-    Value: !Ref SubnetC
-  SubnetIds:
+  PublicSubnetIds:
     Value: !Join
       - ', '
-      - - !Ref SubnetA
-        - !Ref SubnetB
-        - !Ref SubnetC
+      - - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+        - !Ref PublicSubnetC
+  PrivateSubnetIds:
+    Value: !Join
+      - ', '
+      - - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+        - !Ref PrivateSubnetC

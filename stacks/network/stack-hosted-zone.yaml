@@ -4,20 +4,17 @@ Description: Defines the route53 hosted zone (for a publicly owned domain name, 
 Parameters:
   DomainName:
     Type: String
-    Description: Domaine name of the website
+    Description: 'Domaine name of the website (ex: domain-name.com)'
     AllowedPattern: ^[a-z0-9-]+\.[a-z]{2,}$
     ConstraintDescription: Must be a valid domaine name
-  VPCIds:
-    Type: CommaDelimitedList
-    Description: Leave empty for a public hosted zone, provide the list of VPC IDs to associate for a private hosted zone. They are assumed to be from the same region as the stack.
+
+  VPCId:
+    Type: String
+    Description: Leave empty for a public hosted zone, provide a VPC ID to associate to for a private hosted zone.
     Default: ''
 
 Conditions:
-  IsPublicZone: !Equals
-    - !Join
-      - ''
-      - !Ref VPCIds
-    - ''
+  IsPublicZone: !Equals [!Ref VPCId, '']
 
 Resources:
   HostedZone:
@@ -27,13 +24,11 @@ Resources:
       VPCs: !If
         - IsPublicZone
         - !Ref AWS::NoValue
-        - - VPCId: !Select
-              - 0
-              - !Ref VPCIds
+        - - VPCId: !Ref VPCId
             VPCRegion: !Ref AWS::Region
       HostedZoneTags:
         - Key: Name
-          Value: !Ref DomainName
+          Value: !Sub ${DomainName}HostedZone
   Certificate:
     Type: AWS::CertificateManager::Certificate
     Condition: IsPublicZone
@@ -45,7 +40,7 @@ Resources:
           HostedZoneId: !Ref HostedZone
       Tags:
         - Key: Name
-          Value: SSLCertificate
+          Value: !Sub ${DomainName}Certificate
 
 Outputs:
   CertificateArn:

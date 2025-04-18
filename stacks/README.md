@@ -38,41 +38,48 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: My stack
 
 Parameters:
-  StackBucketName:
+  StacksBucketName:
     Type: String
     Description: Name of the bucket containing the stacks
+  DomainName:
+    Type: String
+    Description: 'Name of the owned domain name (ex: domain-name.com)'
 
 Resources:
-  PrivateNetwork:
+  Network:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/${StackBucketName}/network/stack-vpc.yaml
-      Parameters:
-        VpcName: PrivateNetwork
-        PublicVpc: 'false'
-  PrivateHostedZone:
+      TemplateURL: !Sub https://${StacksBucketName}.s3.amazonaws.com/network/stack-vpc.yaml
+  HostedZone:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/${StackBucketName}/network/stack-hosted-zone.yaml
+      TemplateURL: !Sub https://${StacksBucketName}.s3.amazonaws.com/network/stack-hosted-zone.yaml
       Parameters:
-        DomainName: private-domain.com
-        VPCIds:
-          !GetAtt
-          - PrivateNetwork
-          - Outputs.VpcId
+        DomainName: !Ref DomainName
+        VPCId: !GetAtt [Network, Outputs.VpcId]
+  EC2Service:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${StacksBucketName}.s3.amazonaws.com/services/ec2/stack-ec2-webapp.yaml
+      Parameters:
+          DockerImage: nginxdemos/hello
+          VpcId: !GetAtt [Network, Outputs.VpcId]
+          SubnetId: !Select ['0', !Split [', ', !GetAtt [Network, Outputs.PublicSubnetIds]]]
+          HostedZoneId: !GetAtt [HostedZone, Outputs.HostedZoneId]
+          ServiceUrl: !Sub www.${DomainName}
+          CertificateArn: !GetAtt [HostedZone, Outputs.CertificateArn]
 
 Outputs:
-  PrivateHostedZoneId:
-    Value:
-      !GetAtt
-      - PrivateHostedZone
+  HostedZoneId:
+    Value: !GetAtt
+      - HostedZone
       - Outputs.HostedZoneId
     Export:
-      Name: PrivateHostedZoneId
+      Name: HostedZoneId
 ```
 
 Which you can start with
 
 ```bash
-aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StackBucketName,ParameterValue=${MY_STACK_BUCKET} --stack-name test-stack
+aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StacksBucketName,ParameterValue=${MY_STACK_BUCKET} --parameters ParameterKey=DomainName,ParameterValue=${MY_DOMAIN_NAME} --stack-name test-stack
 ```

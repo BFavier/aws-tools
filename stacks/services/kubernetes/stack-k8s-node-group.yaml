@@ -70,15 +70,21 @@ Resources:
           - ResourceType: instance
             Tags:
               - Key: Name
-                Value: !Sub ${AWS::StackName}
-        UserData: !Sub |+
-          #!/bin/bash
-          set -ex
-          /etc/eks/bootstrap.sh ${KubernetesClusterName} --use-max-pods false
+                Value: !Sub ${AWS::StackName}-LaunchTemplate
+              - Key: kubernetes.io/cluster/${KubernetesClusterName}
+                Value: 'owned'
+              - Key: eks:nodegroup-name
+                Value: !Sub ${AWS::StackName}-NodeGroup
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              set -ex
+              /etc/eks/bootstrap.sh ${KubernetesClusterName} --use-max-pods false
   EKSNodeGroup:
     Type: AWS::EKS::Nodegroup
     Properties:
-      NodegroupName: !Sub ${AWS::StackName}
+      NodegroupName: !Sub ${AWS::StackName}-NodeGroup
       ClusterName: !Ref KubernetesClusterName
       NodeRole: !Sub ${KubernetesNodeRoleArn}
       Subnets: !Ref SubnetIds
