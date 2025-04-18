@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Defines the route53 hosted zone (for a publicly owned domain name, or a private fictive one) and an ACM certificate
+Description: Defines the route53 hosted zone and an eventual ACM certificate (⚠️ If the certificate resource is stuck in pending, updating the domain's name servers to match those of the hosted zone might be required !)
 
 Parameters:
   DomainName:

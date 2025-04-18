@@ -43,7 +43,7 @@ Parameters:
     Description: Name of the bucket containing the stacks
   DomainName:
     Type: String
-    Description: 'Name of the owned domain name (ex: domain-name.com)'
+    Description: Domain name for the hosted zone and certificate
 
 Resources:
   Network:
@@ -56,7 +56,6 @@ Resources:
       TemplateURL: !Sub https://${StacksBucketName}.s3.amazonaws.com/network/stack-hosted-zone.yaml
       Parameters:
         DomainName: !Ref DomainName
-        VPCId: !GetAtt [Network, Outputs.VpcId]
   EC2Service:
     Type: AWS::CloudFormation::Stack
     Properties:
