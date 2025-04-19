@@ -35,7 +35,7 @@ Or you can then reference them in your local stacks
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
-Description: My stack
+Description: My test stack
 
 Parameters:
   StacksBucketName:
@@ -80,5 +80,5 @@ Outputs:
 Which you can start with
 
 ```bash
-aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StacksBucketName,ParameterValue=${MY_STACK_BUCKET} --parameters ParameterKey=DomainName,ParameterValue=${MY_DOMAIN_NAME} --stack-name test-stack
+aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StacksBucketName,ParameterValue=${MY_STACK_BUCKET} --parameters ParameterKey=DomainName,ParameterValue=${MY_DOMAIN_NAME} --stack-name test-stack --on-failure DO_NOTHING
 ```

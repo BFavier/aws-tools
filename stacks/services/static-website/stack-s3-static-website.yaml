@@ -4,7 +4,10 @@ Description: Defines the frontend resources
 Parameters:
   DomainName:
     Type: String
-    Description: The name of your website domain
+    Description: 'The domain name for your website (ex: domain-name.com)'
+  HostedZoneId:
+    Type: String
+    Description: The ID of the Route 53 hosted zone for the domain name
 
 Resources:
   FrontendBucket:
@@ -72,7 +75,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt USCertificateRequestLambda.Arn
       DomainName: !Sub '*.${DomainName}'
-      HostedZoneId: !Ref HostedZone
+      HostedZoneId: !Ref HostedZoneId
   USCertificateRequestLambda:
     Type: AWS::Lambda::Function
     DependsOn: CertificateRequestLogGroup
@@ -176,8 +179,5 @@ Resources:
   CertificateRequestLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Join
-        - ''
-        - - /aws/lambda/
-          - !Ref USCertificateRequestLambda
+      LogGroupName: /aws/lambda/USCertificateRequestLambda
       RetentionInDays: 30
