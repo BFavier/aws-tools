@@ -1,10 +1,12 @@
 # 1) Domain stack
 
-This stack creates the route53 hosted zone and the SSL certificates
+This stack creates the route53 hosted zone and the SSL certificates (for a public hosted zone).
 
-⚠️ Manual actions are required. Verify the value of the "name servers": In AWS console > "Route 53" service > "Domain" > "Registered domains" > select your domain name > "Actions" > "Edit name servers". You should put in the same values as in your "Route 53" > "Hosted zones" > select your domain name > the "Route traffic to" values for the DNS record of type NS.
+⚠️ Creating an hosted zones even if it is deleted right after costs a fixed sum of money (0.5 US$ at the time of writing) at the end of the month. Deploying and deleting this stack several times counts toward this. You should create this stack only once and use it's outputs in other stacks later.
 
-You can check the progress of your DNS records propagation with [whatsmydns](https://www.whatsmydns.net/) or with the nslookup command line tool.
+⚠️ For public hosted zone, stack creation can take a very long time. In one case I had to wait 11 hours for my certificate to get validated.
+
+You can check the progress of your DNS records propagation with [whatsmydns](https://www.whatsmydns.net/), [dnschecker](https://dnschecker.org), or with the nslookup command line tool. The process of deploying this stack can be very slow for a public hosted zone.
 
 # 2) Network stack
 
