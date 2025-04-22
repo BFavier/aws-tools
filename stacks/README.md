@@ -20,7 +20,7 @@ git clone https://github.com/BFavier/aws-tools.git
 Finally copy the stacks to the bucket (remember to change the name of the bucket here below)
 
 ```bash
-aws s3 sync ./aws-tools/stacks/ s3://${MY_STACK_BUCKET}
+aws s3 sync ./aws-tools/stacks/ s3://${MY_STACK_BUCKET} --delete
 ```
 
 ## 2) Use the stackes in nested stack templates
