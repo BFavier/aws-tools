@@ -77,7 +77,7 @@ Outputs:
       Name: HostedZoneId
 ```
 
-Which you can start with
+Which you can deploy with
 
 ```bash
 aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StacksBucketName,ParameterValue=${MY_STACK_BUCKET} --parameters ParameterKey=DomainName,ParameterValue=${MY_DOMAIN_NAME} --stack-name test-stack --on-failure DO_NOTHING
