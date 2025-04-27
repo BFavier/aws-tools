@@ -395,7 +395,7 @@ class Scan:
 
 def query_items(table: object,
                 hash_key: object,
-                sort_key_interval: tuple[object | None, object | None] = (None, None),
+                sort_key_filter: str | tuple[object|None, object|None] = (None, None),
                 ascending: bool=True,
                 conditions: ConditionBase | None = None,
                 subset: list[str] | None = None,
@@ -411,8 +411,10 @@ def query_items(table: object,
         The dynamodb Table object
     hash_key : object
         the value of the hash_key for returned items
-    sort_key_interval : tuple of two objects
-        the (from, to) interval (including boundary on both sides) for the sort key, a None means an unbounded side for the interval
+    sort_key_filter : str, or tuple of two objects, or None
+        Ignored if the table does not have a sort key.
+        If a single str is provided, query items for which sort key begin with the provided string.
+        If a (from, to) tuple is provided, it is the interval (including boundary on both sides) used to filter the sort key, a None means an unbounded side for the interval
     ascending : bool
         If one of 'hash_key' or 'sort_key' is provided, the results are returned by ascending (or descending) order of 'sort_key'.
         Otherwise it has no effect, as the full scan is not ordered.
@@ -448,16 +450,20 @@ def query_items(table: object,
     """
     # build key conditions if any
     table_keys = get_table_keys(table)
-    sort_key_start, sort_key_end = sort_key_interval
     key_conditions = Key(table_keys["HASH"]).eq(hash_key)
-    if any(k is not None for k in sort_key_interval): # Only a single condition by key is supported by boto3
+    if "RANGE" in table_keys.keys():
         sort_key = Key(table_keys["RANGE"])
-        if (sort_key_start is not None) and (sort_key_end is not None):
-            key_conditions = key_conditions & sort_key.between(sort_key_start, sort_key_end)
-        elif sort_key_start is not None:
-            key_conditions = key_conditions & sort_key.gte(sort_key_start)
-        elif sort_key_end is not None:
-            key_conditions = key_conditions & sort_key.lte(sort_key_end)
+        if isinstance(sort_key_filter, str):
+            key_conditions = key_conditions & sort_key.begins_with(sort_key_filter)
+        else:
+            sort_key_start, sort_key_end = sort_key_filter
+            if any(k is not None for k in sort_key_filter): # Only a single condition by key is supported by boto3
+                if (sort_key_start is not None) and (sort_key_end is not None):
+                    key_conditions = key_conditions & sort_key.between(sort_key_start, sort_key_end)
+                elif sort_key_start is not None:
+                    key_conditions = key_conditions & sort_key.gte(sort_key_start)
+                elif sort_key_end is not None:
+                    key_conditions = key_conditions & sort_key.lte(sort_key_end)
     # get a single page of results
     kwargs = {
         **(dict(FilterExpression=conditions) if conditions is not None else dict()),
@@ -481,7 +487,7 @@ class Query:
     def __init__(self,
             table: object,
             hash_key: object,
-            sort_key_interval: tuple[object | None, object | None] = (None, None),
+            sort_key_filter: str | tuple[object|None, object|None] = (None, None),
             ascending: bool=True,
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
@@ -490,7 +496,7 @@ class Query:
         self.kwargs = dict(
             table=table,
             hash_key=hash_key,
-            sort_key_interval=sort_key_interval,
+            sort_key_filter=sort_key_filter,
             ascending=ascending,
             conditions=conditions,
             subset=subset,
