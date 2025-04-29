@@ -12,7 +12,7 @@ Parameters:
     Type: String
     AllowedValues:
       - S
-      - 'N'
+      - N
       - B
     Default: S
     Description: Type of the HASH key (S=String, N=Number, B=Binary)
@@ -24,7 +24,7 @@ Parameters:
     Type: String
     AllowedValues:
       - S
-      - 'N'
+      - N
       - B
     Default: S
     Description: Same as HashKeyType, but for the RANGE key
