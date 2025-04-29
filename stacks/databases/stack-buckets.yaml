@@ -15,32 +15,24 @@ Parameters:
     Description: Specify the versioning status for the S3 bucket
 
 Conditions:
-  BucketVersioning: !Not
-    - !Equals
-      - !Ref VersioningStatus
-      - Disabled
-  NoBucketVersioning: !Equals
-    - !Ref VersioningStatus
-    - Disabled
+  EnableVersioning: !Not
+    - !Equals [ !Ref VersioningStatus, Disabled ]
+
 Resources:
-  BucketUnversioned:
+  Bucket:
     Type: AWS::S3::Bucket
-    Condition: NoBucketVersioning
     Properties:
       BucketName: !Ref BucketName
       AccessControl: Private
-  BucketVersioned:
-    Type: AWS::S3::Bucket
-    Condition: BucketVersioning
-    Properties:
-      BucketName: !Ref BucketName
-      AccessControl: Private
-      VersioningConfiguration:
-        Status: !Ref VersioningStatus
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration: !If
+        - EnableVersioning
+        - Status: !Ref VersioningStatus
+        - !Ref AWS::NoValue
 
 Outputs:
   BucketName:
-    Value: !If
-      - BucketVersioning
-      - !Ref BucketVersioned
-      - !Ref BucketUnversioned
+    Value: !Ref Bucket
