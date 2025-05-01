@@ -39,7 +39,15 @@ Resources:
                 Action:
                   - s3:PutObject
                   - s3:PutObjectAcl
+                  - s3:ListBucket
                 Resource: !Sub "arn:aws:s3:::${LogsBucketName}${LogsPrefix}*"
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogStream
+                  - logs:CreateLogGroup
+                  - logs:DescribeLogStreams
+                Resource: "arn:aws:logs:*:*:log-group:/aws/kinesisfirehose/*"
 
   FirehoseDeliveryStream:
     Type: AWS::KinesisFirehose::DeliveryStream
