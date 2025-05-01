@@ -8,8 +8,8 @@ Parameters:
 
   LogsPrefix:
     Type: String
-    Default: /
-    Description: Prefix for the S3 bucket where logs will be stored
+    Default: ""
+    Description: Prefix for the S3 bucket where logs will be stored (without starting slash)
   CompressionFormat:
     Type: String
     Default: GZIP
@@ -18,6 +18,21 @@ Parameters:
       - GZIP
       - SNAPPY
     Description: Compression format for the logs in s3
+  WriteIntervalSeconds:
+    Type: Number
+    Default: '900'
+    Description: Between 1 and 900. Maximum logs aggregation duration in seconds before the file is saved to s3.
+  WriteSizeMB:
+    Type: Number
+    Default: '5'
+    Description: Between 1 and 128. Maximum size in MB of the aggregated logs before the file is saved to s3.
+  ExpirationDays:
+    Type: Number
+    Default: '0'
+    Description: Set 0 to disable. Number expiration of days after which any file created in the bucket with and starting with the prefix will be deleted automatically.
+
+Conditions:
+  ExpirationDaysCondition: !Not [!Equals [!Ref ExpirationDays, '0']]
 
 Resources:
   FirehoseRole:
@@ -37,17 +52,22 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:PutObject
-                  - s3:PutObjectAcl
-                  - s3:ListBucket
-                Resource: !Sub "arn:aws:s3:::${LogsBucketName}${LogsPrefix}*"
+                  - "s3:PutObject"
+                  - "s3:PutObjectAcl"
+                  - "s3:GetObject"
+                  - "s3:AbortMultipartUpload"
+                Resource:
+                  - !Sub "arn:aws:s3:::${LogsBucketName}/*"
               - Effect: Allow
                 Action:
-                  - logs:PutLogEvents
-                  - logs:CreateLogStream
-                  - logs:CreateLogGroup
-                  - logs:DescribeLogStreams
-                Resource: "arn:aws:logs:*:*:log-group:/aws/kinesisfirehose/*"
+                  - "s3:ListBucket"
+                  - "s3:ListBucketMultipartUploads"
+                  - "s3:GetBucketLocation"
+                Resource: !Sub "arn:aws:s3:::${LogsBucketName}"
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: "*"
 
   FirehoseDeliveryStream:
     Type: AWS::KinesisFirehose::DeliveryStream
@@ -59,13 +79,116 @@ Resources:
         RoleARN: !GetAtt FirehoseRole.Arn
         Prefix: !Ref LogsPrefix
         BufferingHints:
-          SizeInMBs: 5
-          IntervalInSeconds: 900
+          SizeInMBs: !Ref WriteSizeMB
+          IntervalInSeconds: !Ref WriteIntervalSeconds
         CompressionFormat: !Ref CompressionFormat
         CloudWatchLoggingOptions:
           Enabled: true
           LogGroupName: "/aws/kinesisfirehose/logs"
           LogStreamName: !Sub "${AWS::StackName}-LogStream"
+
+  LifecycleFunction:
+    Type: AWS::Lambda::Function
+    Condition: ExpirationDaysCondition
+    DependsOn: SetLifecycleLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-SetLifecycle"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LifecycleRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          s3 = boto3.client("s3")
+
+          def handler(event, context):
+              try:
+                  props = event["ResourceProperties"]
+                  bucket = props["BucketName"]
+                  prefix = props["Prefix"]
+                  rule_id = props["RuleId"]
+                  expiration_days = props["ExpirationDays"]
+
+                  # Get existing config if it exists
+                  try:
+                      existing = s3.get_bucket_lifecycle_configuration(Bucket=bucket)
+                      rules = existing.get("Rules", [])
+                  except s3.exceptions.ClientError as e:
+                      if e.response["Error"]["Code"] == "NoSuchLifecycleConfiguration":
+                          rules = []
+                      else:
+                          raise
+
+                  # If the rule must be preemptively deleted
+                  if event["RequestType"] == "Update" or event["RequestType"] == "Delete":
+                      # Remove old rule if it exists
+                      rules = [r for r in rules if r.get("ID") != rule_id]
+
+                  # Add the rule
+                  if not any(r.get("ID") == rule_id for r in rules) and event["RequestType"] != "Delete":
+                      rules.append({
+                          "ID": rule_id,
+                          "Prefix": prefix,
+                          "Status": "Enabled",
+                          "Expiration": {"Days": int(expiration_days)}
+                      })
+
+                      s3.put_bucket_lifecycle_configuration(
+                          Bucket=bucket,
+                          LifecycleConfiguration={"Rules": rules}
+                      )
+
+              except Exception as e:
+                  print("Error:", e)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                  return
+
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+      Timeout: 60
+  LifecycleRole:
+    Type: AWS::IAM::Role
+    Condition: ExpirationDaysCondition
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3LifecyclePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetLifecycleConfiguration
+                  - s3:PutLifecycleConfiguration
+                Resource: !Sub "arn:aws:s3:::${LogsBucketName}"
+              - Effect: Allow
+              
+                Action:
+                  - logs:*
+                Resource: "*"
+  SetLifecyclePolicy:
+    Type: Custom::SetLifecycle
+    Condition: ExpirationDaysCondition
+    DependsOn: LifecycleFunction
+    Properties:
+      ServiceToken: !GetAtt LifecycleFunction.Arn
+      BucketName: !Ref LogsBucketName
+      Prefix: !Ref LogsPrefix
+      RuleId: !Sub "${AWS::StackName}-LifecycleRule"
+      ExpirationDays: !Ref ExpirationDays
+  SetLifecycleLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: ExpirationDaysCondition
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-SetLifecycle"
+      RetentionInDays: 30
 
 Outputs:
   FirehoseStreamName:
