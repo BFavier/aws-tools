@@ -21,7 +21,10 @@ def _recursive_convert(item: object, to_decimal: bool) -> object:
     if isinstance(item, list):
         return [_recursive_convert(i, to_decimal) for i in item]
     elif isinstance(item, set):
-        return {_recursive_convert(i, to_decimal) for i in item}
+        if len(item) == 0:  # DynamoDB does not handle empty sets
+            return None
+        else:
+            return {_recursive_convert(i, to_decimal) for i in item}
     elif isinstance(item, dict):
         return {k: _recursive_convert(v, to_decimal) for k, v in item.items()}
     elif isinstance(item, (int, float)) and to_decimal:
@@ -256,10 +259,10 @@ def put_item(table: object, item: dict, overwrite: bool=False, return_object: bo
     assert all(k in item.keys() for k in table_keys.values())
     try:
         response = table.put_item(
-                Item=_recursive_convert(item, to_decimal=True),
-                ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the overwritten item if any
-                **(dict() if overwrite else dict(ConditionExpression=_key_not_exists_condition(table_keys, attribute_names), ExpressionAttributeNames=attribute_names))
-                )
+            Item=_recursive_convert(item, to_decimal=True),
+            ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the overwritten item if any
+            **(dict() if overwrite else dict(ConditionExpression=_key_not_exists_condition(table_keys, attribute_names), ExpressionAttributeNames=attribute_names))
+        )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         key = {k: item[k] for k in table_keys.values()}
         raise DynamoDBException(f"Item '{key}' already exists for table '{table.name}'")
@@ -295,7 +298,7 @@ def delete_item(table: object, key_or_item: dict, return_object: bool = False) -
             ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the removed item
             ConditionExpression=_key_exists_condition(table_keys, attribute_names),
             ExpressionAttributeNames=attribute_names,
-            )
+        )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         return None
     return _recursive_convert(response.get("Attributes"), to_decimal=False)
