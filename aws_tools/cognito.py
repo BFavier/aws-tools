@@ -172,7 +172,7 @@ def admin_sign_up(user_pool: str, user: str, password: str, attributes: dict={})
         Password=password,
         Permanent=True
     )
-    admin_enable_disable_account(user_pool, user, enabled=True)
+    admin_enable_disable_user(user_pool, user, enabled=True)
 
 
 def admin_resend_account_confirmation_email(pool_client: str, user: str):
@@ -196,7 +196,7 @@ def admin_confirm_status(user_pool: str, user: str):
     )
 
 
-def admin_enable_disable_account(user_pool: str, user: str, enabled: bool):
+def admin_enable_disable_user(user_pool: str, user: str, enabled: bool):
     """
     Disable an account
     """
@@ -206,7 +206,7 @@ def admin_enable_disable_account(user_pool: str, user: str, enabled: bool):
         cognito.admin_disable_user(UserPoolId=user_pool, Username=user)
 
 
-def admin_delete_account(user_pool: str, user: str):
+def admin_delete_user(user_pool: str, user: str):
     """
     Delete an account
     """
