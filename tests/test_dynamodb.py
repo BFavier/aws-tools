@@ -177,6 +177,22 @@ class DynamoDBTest(unittest.TestCase):
         # check that we can get the existing fields
         assert get_item_fields(self.table, self.item_id, {"field", ("array_field", 0), "missing_field"}) == {"field": -1, ("array_field", 0): {"nested": 10.0}}
 
+    def test_set_behaviour(self):
+        """
+        Empty sets are not supported by DynamoDB
+        When creating an item with an empty set, the field is not saved in dynamodb
+        When the set gets empty, the corresponding key is deleted
+        When adding items to a set field that do not exist, the field is created
+        """
+        item_id = {"id": str(uuid4()), "event_time": "23h30"}
+        item = {**item_id, "set_field": set()}
+        put_item(self.table, item)
+        update_item(self.table, item_id, extend_sets={"set_field": {"a", "b"}})
+        assert get_item_fields(self.table, item_id, {"set_field"}) == {"set_field": {"a", "b"}}
+        update_item(self.table, item_id, remove_from_sets={"set_field": {"a", "b"}})
+        assert get_item_fields(self.table, item_id, {"set_field"}) == {}
+        assert get_item(self.table, item_id).get("set_field") is None
+
 
 if __name__ == "__main__":
     unittest.main()

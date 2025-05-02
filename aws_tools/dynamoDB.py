@@ -21,12 +21,9 @@ def _recursive_convert(item: object, to_decimal: bool) -> object:
     if isinstance(item, list):
         return [_recursive_convert(i, to_decimal) for i in item]
     elif isinstance(item, set):
-        if len(item) == 0:  # DynamoDB does not handle empty sets
-            return None
-        else:
-            return {_recursive_convert(i, to_decimal) for i in item}
+        return {_recursive_convert(i, to_decimal) for i in item}
     elif isinstance(item, dict):
-        return {k: _recursive_convert(v, to_decimal) for k, v in item.items()}
+        return {k: _recursive_convert(v, to_decimal) for k, v in item.items() if v != set()}  # remove keys corresponding to empty sets
     elif isinstance(item, (int, float)) and to_decimal:
         return Decimal(item)
     elif isinstance(item, Decimal) and not to_decimal:
