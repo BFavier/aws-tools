@@ -15,6 +15,15 @@ Parameters:
     Type: CommaDelimitedList
     Description: List of email addresses that can receive emails (adresses with the appropriate domain name 'john.doe@domain-name.com')
 
+  EmailEventsLogBucketName:
+    Type: String
+    Description: The name of the bucket to save email events logs in (send, delivered, click, open, ...). Or an empty string not to save logs in s3.
+    Default: ""
+  EmailEventsLogPrefix:
+    Type: String
+    Description: The s3 prefix at which to save the email events logs in.
+    Default: ""
+
 Resources:
   EmailsBucket:
     Type: AWS::S3::Bucket
@@ -217,15 +226,16 @@ Resources:
     Properties:
       LogGroupName: /aws/lambda/DomainVerificationLambda
       RetentionInDays: 30
-  SESBounceAndComplaintSNSTopic:
+
+  BounceAndComplaintSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: SESBounceAndComplaintTopic
-  SESBounceComplaintSNSTopicPolicy:
+  BounceComplaintSNSTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref SESBounceAndComplaintSNSTopic
+        - !Ref BounceAndComplaintSNSTopic
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -233,7 +243,14 @@ Resources:
             Principal:
               Service: ses.amazonaws.com
             Action: SNS:Publish
-            Resource: !Ref SESBounceAndComplaintSNSTopic
+            Resource: !Ref BounceAndComplaintSNSTopic
+  DomainSNSTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BounceAndComplaintSNSTopic
+      Protocol: https
+      Endpoint: !Ref ComplaintsUrl
+
   SESConfigurationSet:
     Type: AWS::SES::ConfigurationSet
     Properties:
@@ -246,16 +263,16 @@ Resources:
         Name: BounceAndComplaintNotifications
         Enabled: true
         MatchingEventTypes:
-          - bounce
-          - complaint
+          - SEND
+          - REJECT
+          - BOUNCE
+          - COMPLAINT
+          - DELIVERY
+          - OPEN
+          - CLICK
+          - SUBSCRIPTION
         SnsDestination:
-          TopicARN: !Ref SESBounceAndComplaintSNSTopic
-  DomainSNSTopicSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref SESBounceAndComplaintSNSTopic
-      Protocol: https
-      Endpoint: !Ref ComplaintsUrl
+          TopicARN: !Ref BounceAndComplaintSNSTopic
 
 Outputs:
   EmailsBucketName:
