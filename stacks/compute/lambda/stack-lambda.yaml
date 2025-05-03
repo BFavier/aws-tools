@@ -1,5 +1,18 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Lambda scheduled every hour to clean up a DynamoDB table
+Description: Lambda scheduled every hour to clean up DynamoDB using resource API
+
+Parameters:
+  LambdaName:
+    Type: String
+    Default: DynamoDBCleanupFunction
+    Description: Name of the lambda to create
+  Schedule:
+    Type: String
+    Default: rate(1 hour)
+    Description: 'The "cron" or "rate" at which the lambda gets trigerred. Leave an empty string for no auto-trigger.'
+
+Conditions:
+  IsScheduled: !Not [!Equals ['', !Ref Schedule]]
 
 Resources:
   CleanupFunctionRole:
@@ -60,7 +73,7 @@ Resources:
               dynamodb = boto3.resource('dynamodb')
               table = dynamodb.Table(table_name)
               table_keys = {ks["KeyType"]: ks["AttributeName"] for ks in table.key_schema}
-              now = datetime.now(ZoneInfo('UTC')).isoformat()
+              timestamp = datetime.now(ZoneInfo('UTC')).isoformat()
 
               deleted = 0
               with table.batch_writer() as batch:
@@ -70,7 +83,7 @@ Resources:
                       next_page_token = response.get("LastEvaluatedKey")
                       for item in response.get('Items', []):
                           # Replace this condition with your own cleanup logic
-                          if item[table_keys["RANGE"]] < delete_until_timestamp:
+                          if item[table_keys["RANGE"]] <= timestamp:
                               batch.delete_item(Key={k: item[k] for k in table_keys.values()})
                               deleted += 1
                       if next_page_token is None:
@@ -80,6 +93,7 @@ Resources:
 
   CleanupSchedule:
     Type: AWS::Events::Rule
+    Condition: IsScheduled
     Properties:
       Name: HourlyCleanupTrigger
       ScheduleExpression: rate(1 hour)
@@ -90,8 +104,16 @@ Resources:
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
+    Condition: IsScheduled
     Properties:
       FunctionName: !Ref CleanupLambdaFunction
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt CleanupSchedule.Arn
+
+
+Outputs:
+  LambdaArn:
+    Value: !GetAtt CleanupLambdaFunction.Arn
+  LambdaName:
+    Value: !Ref CleanupLambdaFunction
