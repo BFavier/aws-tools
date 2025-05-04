@@ -5,7 +5,7 @@ from typing import Iterator, Callable
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferManager, TransferConfig
 
-s3 = boto3.resource('s3')
+s3_resource = boto3.resource('s3')
 s3_client = boto3.client("s3")
 
 
@@ -14,7 +14,7 @@ def object_exists(bucket_name: str, key: str|pathlib.Path) -> bool:
     returns whether an object exists on as3 or not
     """
     try:
-        s3.Object(bucket_name, key).load()
+        s3_resource.Object(bucket_name, key).load()
     except ClientError as e:
         if e.response['Error']['Code'] == '404':
             return False
@@ -23,11 +23,22 @@ def object_exists(bucket_name: str, key: str|pathlib.Path) -> bool:
     return True
 
 
+def get_object_bytes_size(bucket_name: str, key: str) -> int | None:
+    """
+    Returns the object size in bytes, or None if it does not exists
+    """
+    try:
+        s3_object = s3_resource.Object(bucket_name, key)
+        return s3_object.content_length
+    except ClientError as e:
+        return None
+
+
 def list_objects(bucket_name: str, prefix: str|pathlib.Path="") -> Iterator[object]:
     """
     List the objects found in the given prefix of the bucket
     """
-    bucket = s3.Bucket(bucket_name)
+    bucket = s3_resource.Bucket(bucket_name)
     if isinstance(prefix, pathlib.Path):
         prefix = prefix.as_posix()
     yield from bucket.objects.filter(Prefix=prefix)
@@ -37,7 +48,7 @@ def upload_files(files_path: str|pathlib.Path, bucket_name: str, prefix: str|pat
     """
     upload the files in the given file path (or a single file path) to the given s3 bucket at given prefix
     """
-    bucket = s3.Bucket(bucket_name)
+    bucket = s3_resource.Bucket(bucket_name)
     files_path = pathlib.Path(files_path)
     prefix = pathlib.Path(prefix)
     if not files_path.exists():
@@ -59,7 +70,7 @@ def download_files(bucket_name: str, prefix: str|pathlib.Path, directory: str|pa
     """
     download the files at the given prefix (or a single file) of a given bucket in the given directory
     """
-    bucket = s3.Bucket(bucket_name)
+    bucket = s3_resource.Bucket(bucket_name)
     directory = pathlib.Path(directory)
     if not directory.exists():
         if create_missing_path:
@@ -86,7 +97,7 @@ def upload_data(data: bytes, bucket_name: str, key: str|pathlib.Path, overwrite:
         key = key.as_posix()
     if not overwrite and object_exists(bucket_name, key):
         raise FileExistsError(f"An object with key '{key}' exist already, use overwrite=True to overwrite")
-    s3.Object(bucket_name, key).put(Key=key, Body=data)
+    s3_resource.Object(bucket_name, key).put(Key=key, Body=data)
 
 
 def download_data(bucket_name: str, key: str|pathlib.Path) -> bytes:
@@ -95,14 +106,14 @@ def download_data(bucket_name: str, key: str|pathlib.Path) -> bytes:
     """
     if isinstance(key, pathlib.Path):
         key = key.as_posix()
-    return s3.Object(bucket_name, key).get()["Body"].read()
+    return s3_resource.Object(bucket_name, key).get()["Body"].read()
 
 
 def delete_objects(bucket_name: str, prefix: str|pathlib.Path, callback: Callable|None = None):
     """
     Delete all objects that match the prefix
     """
-    bucket = s3.Bucket(bucket_name)
+    bucket = s3_resource.Bucket(bucket_name)
     objects = list_objects(bucket_name, prefix)
     while True:
         delete = [{"Key": obj.key} for i, obj in zip(range(1_000), objects)]
