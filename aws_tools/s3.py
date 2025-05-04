@@ -3,8 +3,10 @@ import pathlib
 import boto3
 from typing import Iterator, Callable
 from botocore.exceptions import ClientError
+from boto3.s3.transfer import TransferManager, TransferConfig
 
 s3 = boto3.resource('s3')
+s3_client = boto3.client("s3")
 
 
 def object_exists(bucket_name: str, key: str|pathlib.Path) -> bool:
@@ -110,6 +112,24 @@ def delete_objects(bucket_name: str, prefix: str|pathlib.Path, callback: Callabl
         if callback is not None:
             for obj in delete:
                 callback(object_key=obj["Key"])
+
+
+def copy_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, new_key: str|pathlib.Path, blocking: bool=False, callback: Callable[[], None] | None = None):
+    """
+    Copy an object without downloading it. Can handle very big files, and is non blocking.
+    """
+    transfer_config = TransferConfig(multipart_threshold=100 * 1024**2)  # 100 MB chunks
+    tm = TransferManager(s3_client, config=transfer_config)
+    future = tm.copy(
+        copy_source={'Bucket': bucket_name, 'Key': key.as_posix() if isinstance(key, pathlib.Path) else key},
+        bucket=new_bucket_name,
+        key=new_key.as_posix() if isinstance(new_key, pathlib.Path) else new_key
+    )
+    if callback is not None:
+        future.add_done_callback(callback)
+    if blocking:
+        future.result()
+        tm.shutdown()
 
 
 if __name__ == "__main__":
