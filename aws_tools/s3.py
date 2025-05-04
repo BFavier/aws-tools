@@ -4,6 +4,7 @@ import boto3
 from typing import Iterator, Callable
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferManager, TransferConfig
+from s3transfer.futures import TransferFuture
 
 s3_resource = boto3.resource('s3')
 s3_client = boto3.client("s3")
@@ -125,7 +126,7 @@ def delete_objects(bucket_name: str, prefix: str|pathlib.Path, callback: Callabl
                 callback(object_key=obj["Key"])
 
 
-def copy_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, new_key: str|pathlib.Path, blocking: bool=False, callback: Callable[[], None] | None = None):
+def copy_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, new_key: str|pathlib.Path, blocking: bool=False, callback: Callable[[TransferFuture], None] | None = None) -> TransferFuture:
     """
     Copy an object without downloading it. Can handle very big files, and is non blocking.
     """
@@ -141,6 +142,31 @@ def copy_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, n
     if blocking:
         future.result()
         tm.shutdown()
+    return future
+
+
+def delete_object(bucket_name: str, key: str|pathlib.Path):
+    """
+    Delete an object, which is always non blocking
+    """
+    obj = s3_resource.Object(bucket_name, key.as_posix() if isinstance(key, pathlib.Path) else key)
+    obj.delete()
+
+
+def move_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, new_key: str|pathlib.Path, blocking: bool=False):
+    """
+    Move an s3 object
+    """
+    copy_object(
+        bucket_name,
+        key,
+        new_bucket_name,
+        new_key,
+        blocking=blocking,
+        callback=lambda future: delete_object(bucket_name, key) if not blocking else None
+    )
+    if blocking:
+        delete_object(bucket_name, key)
 
 
 if __name__ == "__main__":
