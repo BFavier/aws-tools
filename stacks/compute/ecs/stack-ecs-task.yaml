@@ -13,15 +13,15 @@ Parameters:
   CpuUnits:
     Type: Number
     Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
-    Default: '256'
+    Default: 256
   MemoryMb:
     Type: Number
     Description: Memory resources allocated to each docker container running the service (in MB)
-    Default: '512'
+    Default: 512
   DiskSpace:
     Type: Number
     Description: Disk space in gB
-    Default: '20'
+    Default: 20
   EnvironmentVariables:
     Type: CommaDelimitedList
     Description: 'The environment variables to add to the worker nodes, as a JSON string. Example: !Sub ''[{"Name": "AWS_DEFAULT_REGION", "Value": "${AWS::Region}"}, {"Name": "AWS_STACK_NAME", "Value": "${AWS::StackName}"}]'''
