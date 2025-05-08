@@ -11,17 +11,17 @@ Parameters:
     Description: The type of clusters that the task should be compatible with. Might restrain the core/memory/disk space values that are valid.
     Default: EC2,FARGATE
   CpuUnits:
-    Type: Number
+    Type: String
     Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
-    Default: 256
-  MemoryMb:
-    Type: Number
-    Description: Memory resources allocated to each docker container running the service (in MB)
-    Default: 512
-  DiskSpace:
-    Type: Number
-    Description: Disk space in gB
-    Default: 20
+    Default: '256'
+  MemoryMiB:
+    Type: String
+    Description: Memory resources allocated to each docker container running the service (in MiB)
+    Default: '512'
+  DiskSpaceGiB:
+    Type: String
+    Description: Disk space in GiB
+    Default: '20'
   EnvironmentVariables:
     Type: CommaDelimitedList
     Description: 'The environment variables to add to the worker nodes, as a JSON string. Example: !Sub ''[{"Name": "AWS_DEFAULT_REGION", "Value": "${AWS::Region}"}, {"Name": "AWS_STACK_NAME", "Value": "${AWS::StackName}"}]'''
@@ -33,6 +33,30 @@ Parameters:
 
 Conditions:
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
+
+Mappings:
+  PowersOfTwo:
+    "256": { Value: 256 }
+    "512": { Value: 512 }
+    "1024": { Value: 1024 }
+    "2048": { Value: 2048 }
+    "4096": { Value: 4096 }
+    "8192": { Value: 8192 }
+    "16384": { Value: 16384 }
+    "32768": { Value: 32768 }
+    "65536": { Value: 65536 }
+    "120000": { Value: 120000 }
+  DiskSpaceValues:
+    "20": { Value: 20 }
+    "40": { Value: 40 }
+    "60": { Value: 60 }
+    "80": { Value: 80 }
+    "100": { Value: 100 }
+    "120": { Value: 120 }
+    "140": { Value: 140 }
+    "160": { Value: 160 }
+    "180": { Value: 180 }
+    "200": { Value: 200 }
 
 Resources:
   ExecutionRole:  # this is the role of the instance that execute the docker image, not the role endorsed from the docker image
@@ -94,8 +118,8 @@ Resources:
         - Name: TaskContainerName
           Image: !Ref DockerImage
           Environment: !Ref EnvironmentVariables
-          Cpu: !Ref CpuUnits
-          Memory: !Ref MemoryMb
+          Cpu: !FindInMap [PowersOfTwo, !Ref CpuUnits, Value]
+          Memory: !FindInMap [PowersOfTwo, !Ref MemoryMiB, Value]
           Essential: true
           PortMappings:
             - ContainerPort: 80
@@ -106,7 +130,7 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Sub ${AWS::StackName}-Task
       EphemeralStorage:
-        SizeInGiB: !Ref DiskSpace
+        SizeInGiB: !FindInMap [DiskSpaceValues, !Ref DiskSpaceGiB, Value]
       RequiresCompatibilities: !Ref CompatibilityRequirements
       NetworkMode: host
       TaskRoleArn: !Ref RunnerRole
