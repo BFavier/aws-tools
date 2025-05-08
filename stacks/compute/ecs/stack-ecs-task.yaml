@@ -4,7 +4,7 @@ Description: Defines a service that runs on an ECS cluster, with a load balancer
 Parameters:
   DockerImage:
     Type: String
-    Description: The address of the Docker image to use
+    Description: The address of the Docker image to use (busybox, python:3.12, public.ecr.aws/lambda/python:3.12, 717279735548.dkr.ecr.eu-west-3.amazonaws.com/sleek-simulations/webapp, ...)
 
   CompatibilityRequirements:
     Type: CommaDelimitedList
