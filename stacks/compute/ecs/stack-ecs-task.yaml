@@ -89,7 +89,7 @@ Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: TaskFamily
+      Family: !Sub ${AWS::StackName}-TaskFamily
       ContainerDefinitions:
         - Name: TaskContainerName
           Image: !Ref DockerImage
