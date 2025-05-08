@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Defines a service that runs on an ECS cluster, with a load balancer in front
+
+Parameters:
+  DockerImageURI:
+    Type: String
+    Description: The URI of the Docker image to use
+
+  CompatibilityRequirements:
+    Type: CommaDelimitedList
+    Description: The type of clusters that the task should be compatible with. Might restrain the core/memory/disk space values that are valid.
+    Default: EC2,FARGATE
+  CpuUnits:
+    Type: Number
+    Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
+    Default: '256'
+  MemoryMb:
+    Type: Number
+    Description: Memory resources allocated to each docker container running the service (in MB)
+    Default: '512'
+  DiskSpace:
+    Type: Number
+    Description: Disk space in gB
+    Default: '20'
+  EnvironmentVariables:
+    Type: CommaDelimitedList
+    Description: 'The environment variables to add to the worker nodes, as a JSON string. Example: !Sub ''[{"Name": "AWS_DEFAULT_REGION", "Value": "${AWS::Region}"}, {"Name": "AWS_STACK_NAME", "Value": "${AWS::StackName}"}]'''
+    Default: '[]'
+  RunerRolePolicyArn:
+    Type: String
+    Description: The Arn of an AWS::IAM::ManagedPolicy object that will be used to create the role EC2 endorses. Or an empty string for default rights.
+    Default: ''
+
+Conditions:
+  NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
+
+Resources:
+  ExecutionRole:  # this is the role of the instance that execute the docker image, not the role endorsed from the docker image
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-ExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  DefaultRunnerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AWS::StackName}-DefaultRunnerPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - ecr:GetAuthorizationToken
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+            Resource: "*"
+  RunnerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-RunnerRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns: 
+        - !Ref DefaultRunnerPolicy
+        - !If
+          - NotHasPolicy
+          - !Ref AWS::NoValue
+          - !Ref RunerRolePolicyArn
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${AWS::StackName}-TaskFamily
+      ContainerDefinitions:
+        - Name: TaskContainerName
+          Image: !Ref DockerImageURI
+          Environment: !Ref EnvironmentVariables
+          Cpu: !Ref CpuUnits
+          Memory: !Ref MemoryMb
+          Essential: true
+          PortMappings:
+            - ContainerPort: 80
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Sub ${AWS::StackName}-Task
+      EphemeralStorage:
+        SizeInGiB: !Ref DiskSpace
+      RequiresCompatibilities: !Ref CompatibilityRequirements
+      NetworkMode: host
+      TaskRoleArn: !Ref RunnerRole
+      ExecutionRoleArn: !Ref ExecutionRole
+  ECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${AWS::StackName}
+      RetentionInDays: 30
+
+Outputs:
+  TaskDefinitionArn:
+    Value: !Ref TaskDefinition

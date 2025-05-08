@@ -2,12 +2,18 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Defines a service that runs on an ECS cluster, with a load balancer in front
 
 Parameters:
+  VpcId:
+    Type: String
+    Description: ID of the VPC to start the instances in
   SubnetIds:
     Type: CommaDelimitedList
     Description: IDs of the subnets (in different availability zones of the same VPC) to scale the instances in
-  SSHKeyName:
+  ClusterType:
     Type: String
-    Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
+    Description: Type of ECS cluster to launch tasks on
+    AllowedValues:
+      - FARGATE
+      - EC2
 
   InstanceType:
     Type: String
@@ -29,13 +35,19 @@ Parameters:
     Type: Number
     Description: Number of seconds between an upward or a downward instances scaling adjustment
     Default: '300'
+  SSHKeyName:
+    Type: String
+    Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
+    Default: ''
 
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
+  IsEc2Cluster: !Equals ['ec2', !Ref ClusterType]
 
 Resources:
   ECSInstanceRole:
     Type: AWS::IAM::Role
+    Condition: IsEc2Cluster
     Properties:
       RoleName: !Sub ${AWS::StackName}-ECSInstanceRole
       AssumeRolePolicyDocument:
@@ -50,18 +62,20 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
   ECSInstanceProfile:
     Type: AWS::IAM::InstanceProfile
+    Condition: IsEc2Cluster
     Properties:
       Roles:
         - !Ref ECSInstanceRole
   RunnerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Condition: IsEc2Cluster
     Properties:
       GroupDescription: Security group for runners
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - Fn::If:
           - HasSSHKeyName
-          - IpProtocol:
+          - IpProtocol: tcp
             FromPort: 22
             ToPort: 22
             CidrIp: 0.0.0.0/0
@@ -79,6 +93,7 @@ Resources:
           CidrIp: 0.0.0.0/0
   LaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
+    Condition: IsEc2Cluster
     DependsOn: ECSCluster
     Properties:
       ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id}}'
@@ -97,6 +112,7 @@ Resources:
             echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: IsEc2Cluster
     Properties:
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: !Ref MinInstanceCount
@@ -118,6 +134,7 @@ Resources:
           PropagateAtLaunch: true
   CapacityProvider:
     Type: AWS::ECS::CapacityProvider
+    Condition: IsEc2Cluster
     Properties:
       AutoScalingGroupProvider:
         AutoScalingGroupArn: !Ref AutoScalingGroup
@@ -130,11 +147,17 @@ Resources:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: !Sub ${AWS::StackName}-ECSCluster
-      CapacityProviders:
-        - !Ref MyCapacityProvider
-      DefaultCapacityProviderStrategy:
-        - CapacityProvider: !Ref MyCapacityProvider
-          Weight: 1
+      CapacityProviders: !If
+        - IsEc2Cluster
+        - [!Ref CapacityProvider]
+        - !Ref AWS::NoValue
+      DefaultCapacityProviderStrategy: !If
+        - IsEc2Cluster
+        - 
+          - CapacityProvider: !Ref CapacityProvider
+            Weight: 1
+        - !Ref AWS::NoValue
 
 Outputs:
-  pass
+  ECSClusterName:
+    Value: !Ref ECSCluster
