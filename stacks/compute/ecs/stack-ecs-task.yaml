@@ -23,7 +23,7 @@ Parameters:
     Description: Disk space in GiB
     Default: 20
   EnvironmentVariables:
-    Type: CommaDelimitedList
+    Type: String
     Description: 'The environment variables to add to the worker nodes, as a JSON string. Example: !Sub ''[{"Name": "AWS_DEFAULT_REGION", "Value": "${AWS::Region}"}, {"Name": "AWS_STACK_NAME", "Value": "${AWS::StackName}"}]'''
     Default: '[]'
   RunerRolePolicyArn:
