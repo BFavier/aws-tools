@@ -159,5 +159,5 @@ Resources:
         - !Ref AWS::NoValue
 
 Outputs:
-  ECSClusterName:
+  ClusterName:
     Value: !Ref ECSCluster
