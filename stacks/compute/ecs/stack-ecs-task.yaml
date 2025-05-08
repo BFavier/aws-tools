@@ -2,9 +2,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Defines a service that runs on an ECS cluster, with a load balancer in front
 
 Parameters:
-  DockerImageURI:
+  DockerImage:
     Type: String
-    Description: The URI of the Docker image to use
+    Description: The address of the Docker image to use
 
   CompatibilityRequirements:
     Type: CommaDelimitedList
@@ -92,7 +92,7 @@ Resources:
       Family: !Sub ${AWS::StackName}-TaskFamily
       ContainerDefinitions:
         - Name: TaskContainerName
-          Image: !Ref DockerImageURI
+          Image: !Ref DockerImage
           Environment: !Ref EnvironmentVariables
           Cpu: !Ref CpuUnits
           Memory: !Ref MemoryMb
