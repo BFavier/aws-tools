@@ -33,7 +33,7 @@ Parameters:
 
 Conditions:
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
-  UseAWSVPCNetworkMode: !Contains [ !Ref RequiredCompatibilities, FARGATE ]
+  UseAWSVPCNetworkMode: !Contains [ !Ref CompatibilityRequirements, FARGATE ]
 
 Resources:
   ExecutionRole:  # this is the role of the instance that execute the docker image, not the role endorsed from the docker image
