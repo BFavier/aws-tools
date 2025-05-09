@@ -13,15 +13,15 @@ Parameters:
   CpuUnits:
     Type: Number
     Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
-    Default: 256
+    Default: '256'
   MemoryMiB:
     Type: Number
     Description: Memory resources allocated to each docker container running the service (in MiB)
-    Default: 512
+    Default: '512'
   DiskSpaceGiB:
     Type: Number
     Description: Disk space in GiB
-    Default: 21
+    Default: '21'
   EnvironmentFiles:
     Type: CommaDelimitedList
     Description: The s3 uri (s3://.../variables.env) of .env files containing env variables definitions. They must be read accessible from the runner role.
@@ -33,7 +33,10 @@ Parameters:
 
 Conditions:
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
-  UseAWSVPCNetworkMode: !Contains [ !Ref CompatibilityRequirements, FARGATE ]
+  UseAWSVPCNetworkMode: !Or
+    - !Equals [!Join [",", !Ref CompatibilityRequirements], 'FARGATE']
+    - !Equals [!Join [",", !Ref CompatibilityRequirements], 'EC2,FARGATE']
+    - !Equals [!Join [",", !Ref CompatibilityRequirements], 'FARGATE,EC2']
 
 Resources:
   ExecutionRole:  # this is the role of the instance that execute the docker image, not the role endorsed from the docker image
@@ -108,8 +111,8 @@ Resources:
               awslogs-stream-prefix: !Sub ${AWS::StackName}-Task
       Cpu: !Ref CpuUnits
       Memory: !Ref MemoryMiB
-      EphemeralStorage:
-        - SizeInGiB: !Ref DiskSpaceGiB
+      # EphemeralStorage:
+      #   SizeInGiB: !Ref DiskSpaceGiB
       RequiresCompatibilities: !Ref CompatibilityRequirements
       NetworkMode: !If [ UseAWSVPCNetworkMode, awsvpc, host ]
       TaskRoleArn: !Ref RunnerRole
