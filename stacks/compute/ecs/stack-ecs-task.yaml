@@ -97,7 +97,7 @@ Resources:
       ContainerDefinitions:
         - Name: TaskContainerName
           Image: !Ref DockerImage
-          EnvironmentFiles: !Ref EnvironmentFiles
+          # EnvironmentFiles: #!Ref EnvironmentFiles
           Cpu: !Ref CpuUnits
           Memory: !Ref MemoryMiB
           Essential: true
