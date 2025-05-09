@@ -21,11 +21,11 @@ Parameters:
   DiskSpaceGiB:
     Type: Number
     Description: Disk space in GiB
-    Default: 20
-  EnvironmentVariables:
-    Type: String
-    Description: 'The environment variables to add to the worker nodes, as a JSON string. Example: !Sub ''[{"Name": "AWS_DEFAULT_REGION", "Value": "${AWS::Region}"}, {"Name": "AWS_STACK_NAME", "Value": "${AWS::StackName}"}]'''
-    Default: '[]'
+    Default: 21
+  EnvironmentFiles:
+    Type: CommaDelimitedList
+    Description: The s3 uri (s3://.../variables.env) of .env files containing env variables definitions. They must be read accessible from the runner role.
+    Default: ''
   RunerRolePolicyArn:
     Type: String
     Description: The Arn of an AWS::IAM::ManagedPolicy object that will be used to create the role EC2 endorses. Or an empty string for default rights.
@@ -33,6 +33,7 @@ Parameters:
 
 Conditions:
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
+  UseAWSVPCNetworkMode: !Contains [ !Ref RequiredCompatibilities, FARGATE ]
 
 Resources:
   ExecutionRole:  # this is the role of the instance that execute the docker image, not the role endorsed from the docker image
@@ -93,7 +94,7 @@ Resources:
       ContainerDefinitions:
         - Name: TaskContainerName
           Image: !Ref DockerImage
-          Environment: !Ref EnvironmentVariables
+          EnvironmentFiles: !Ref EnvironmentFiles
           Cpu: !Ref CpuUnits
           Memory: !Ref MemoryMiB
           Essential: true
@@ -105,10 +106,12 @@ Resources:
               awslogs-group: !Ref ECSLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Sub ${AWS::StackName}-Task
+      Cpu: !Ref CpuUnits
+      Memory: !Ref MemoryMiB
       EphemeralStorage:
-        SizeInGiB: !Ref DiskSpaceGiB
+        - SizeInGiB: !Ref DiskSpaceGiB
       RequiresCompatibilities: !Ref CompatibilityRequirements
-      NetworkMode: host
+      NetworkMode: !If [ UseAWSVPCNetworkMode, awsvpc, host ]
       TaskRoleArn: !Ref RunnerRole
       ExecutionRoleArn: !Ref ExecutionRole
   ECSLogGroup:
