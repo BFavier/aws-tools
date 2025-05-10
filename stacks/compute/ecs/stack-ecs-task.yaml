@@ -5,11 +5,13 @@ Parameters:
   DockerImage:
     Type: String
     Description: The address of the Docker image to use (busybox, python:3.12, public.ecr.aws/lambda/python:3.12, 717279735548.dkr.ecr.eu-west-3.amazonaws.com/sleek-simulations/webapp, ...)
-
-  CompatibilityRequirements:
-    Type: CommaDelimitedList
+  ClusterType:
+    Type: String
     Description: The type of clusters that the task should be compatible with. Might restrain the core/memory/disk space values that are valid.
-    Default: EC2,FARGATE
+    AllowedValues:
+      - 'EC2'
+      - 'FARGATE'
+
   CpuUnits:
     Type: Number
     Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
@@ -18,28 +20,30 @@ Parameters:
     Type: Number
     Description: Memory resources allocated to each docker container running the service (in MiB)
     Default: '512'
-  DiskSpaceGiB:
+  FargateDiskSpaceGiB:
     Type: Number
-    Description: Disk space in GiB
-    Default: '21'
-  EnvironmentFiles:
-    Type: CommaDelimitedList
-    Description: The s3 uri (s3://.../variables.env) of .env files containing env variables definitions. They must be read accessible from the runner role.
+    Description: Disk space in GiB. Only valid for FARGATE tasks. Must be between 20 and 200.
+    Default: '20'
+  EnvironmentFile:
+    Type: String
+    Description: The s3 uri (s3://.../variables.env) of .env file containing env variables definitions (MY_ENV=VALUE). They must be read accessible from the runner role.
     Default: ''
   RunerRolePolicyArn:
     Type: String
-    Description: The Arn of an AWS::IAM::ManagedPolicy object that will be used to create the role EC2 endorses. Or an empty string for default rights.
+    Description: The Arn of an AWS::IAM::ManagedPolicy object that will be used to create the role EC2 endorses. Or an empty string for essential rights only.
     Default: ''
 
 Conditions:
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
-  UseAWSVPCNetworkMode: !Or
-    - !Equals [!Join [",", !Ref CompatibilityRequirements], 'FARGATE']
-    - !Equals [!Join [",", !Ref CompatibilityRequirements], 'EC2,FARGATE']
-    - !Equals [!Join [",", !Ref CompatibilityRequirements], 'FARGATE,EC2']
+  NotHasEnvFile: !Equals ['', !Ref EnvironmentFile]
+  FargateClusterType: !Equals [!Ref ClusterType, 'FARGATE']
+  DefaultFargateDiskSpaceGiB: !Equals [!Ref FargateDiskSpaceGiB, 20]
+  SpecifyStorage: !And
+    - !Not [!Condition FargateClusterType]
+    - !Not [!Condition DefaultFargateDiskSpaceGiB]
 
 Resources:
-  ExecutionRole:  # this is the role of the instance that execute the docker image, not the role endorsed from the docker image
+  ExecutionRole:  # this is the role of the instance that pulls and execute the docker image
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub ${AWS::StackName}-ExecutionRole
@@ -52,7 +56,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-  DefaultRunnerPolicy:
+  DefaultRunnerPolicy:  # this is the role endorsed from the docker image that runs the entrypoint
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub ${AWS::StackName}-DefaultRunnerPolicy
@@ -64,10 +68,6 @@ Resources:
               - logs:CreateLogGroup
               - logs:CreateLogStream
               - logs:PutLogEvents
-              - ecr:GetAuthorizationToken
-              - ecr:BatchCheckLayerAvailability
-              - ecr:GetDownloadUrlForLayer
-              - ecr:BatchGetImage
             Resource: "*"
   RunnerRole:
     Type: AWS::IAM::Role
@@ -97,7 +97,11 @@ Resources:
       ContainerDefinitions:
         - Name: TaskContainerName
           Image: !Ref DockerImage
-          # EnvironmentFiles: #!Ref EnvironmentFiles
+          EnvironmentFiles: !If
+            - NotHasEnvFile
+            - !Ref AWS::NoValue
+            - Type: s3
+              Value: !Ref EnvironmentFile
           Cpu: !Ref CpuUnits
           Memory: !Ref MemoryMiB
           Essential: true
@@ -111,10 +115,13 @@ Resources:
               awslogs-stream-prefix: !Sub ${AWS::StackName}-Task
       Cpu: !Ref CpuUnits
       Memory: !Ref MemoryMiB
-      # EphemeralStorage:
-      #   SizeInGiB: !Ref DiskSpaceGiB
-      RequiresCompatibilities: !Ref CompatibilityRequirements
-      NetworkMode: !If [ UseAWSVPCNetworkMode, awsvpc, host ]
+      EphemeralStorage: !If
+        - SpecifyStorage
+        - SizeInGiB: FargateDiskSpaceGiB
+        - !Ref AWS::NoValue
+      RequiresCompatibilities:
+        - !Ref ClusterType
+      NetworkMode: !If [ FargateClusterType, awsvpc, host ]
       TaskRoleArn: !Ref RunnerRole
       ExecutionRoleArn: !Ref ExecutionRole
   ECSLogGroup:
