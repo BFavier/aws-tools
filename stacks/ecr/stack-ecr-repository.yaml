@@ -3,6 +3,14 @@ Parameters:
     Type: String
     Description: ECR repository name
 
+  TagsMutable:
+    Type: String
+    Description: Whether the image tags are allowed to be mutable or not
+    AllowedValues:
+      - IMMUTABLE
+      - MUTABLE
+    Default: IMMUTABLE
+
 
 Resources:
   ECRRepository:
