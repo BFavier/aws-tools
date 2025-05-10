@@ -28,6 +28,10 @@ Parameters:
     Type: String
     Description: The s3 uri (s3://.../variables.env) of .env file containing env variables definitions (MY_ENV=VALUE). They must be read accessible from the runner role.
     Default: ''
+  EntryPoint:
+    Type: String
+    Description: The docker run --entrypoint argument, as a comma delimited list (example 'python,-m,package.entryoint.py'), or empty string to keep default
+    Default: ''
   RunerRolePolicyArn:
     Type: String
     Description: The Arn of an AWS::IAM::ManagedPolicy object that will be used to create the role EC2 endorses. Or an empty string for essential rights only.
@@ -36,6 +40,7 @@ Parameters:
 Conditions:
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
   NotHasEnvFile: !Equals ['', !Ref EnvironmentFile]
+  NotHasEntryPoint: !Equals ['', !Ref EntryPoint]
   FargateClusterType: !Equals [!Ref ClusterType, 'FARGATE']
   DefaultFargateDiskSpaceGiB: !Equals [!Ref FargateDiskSpaceGiB, 20]
   SpecifyStorage: !And
@@ -97,6 +102,10 @@ Resources:
       ContainerDefinitions:
         - Name: TaskContainerName
           Image: !Ref DockerImage
+          EntryPoint: !If
+            - NotHasEntryPoint
+            - !Ref AWS::NoValue
+            - !Split [',', !Ref EntryPoint]
           EnvironmentFiles: !If
             - NotHasEnvFile
             - !Ref AWS::NoValue
