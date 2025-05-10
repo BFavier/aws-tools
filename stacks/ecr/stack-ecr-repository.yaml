@@ -1,0 +1,18 @@
+Parameters:
+  RepositoryName:
+    Type: String
+    Description: ECR repository name
+
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+        RepositoryName: !Ref RepositoryName
+        ImageTagMutability: IMMUTABLE
+        ImageScanningConfiguration:
+            scanOnPush: true
+
+Outputs:
+  RepositoryName:
+    Value: !Ref ECRRepository
