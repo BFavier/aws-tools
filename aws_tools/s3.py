@@ -174,14 +174,14 @@ def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'a
     Initiate a multipart upload by returning an 'upload_id'
     """
     response = s3_client.create_multipart_upload(
-        Bucket=BUCKET_NAME,
+        Bucket=bucket_name,
         Key=key,
         ContentType=content_type
     )
     return response['UploadId']
 
 
-def generate_presigned_url_for_part(bucket_name: str, key: str, upload_id: str, part_number: int, expiration=3600) -> str:
+def generate_url_for_part_upload(bucket_name: str, key: str, upload_id: str, part_number: int, expiration=3600) -> str:
     """
     Returns a presigned url, that must be called with PUT request for a part of the multipart upload.
     The 'part_number' must start indexing at 1.
@@ -212,11 +212,22 @@ def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_t
     )
 
 
-def abort_multipart_upload():
+def abort_multipart_upload(bucket_name: str, key: str, upload_id: str):
     """
     Abort an existing upload
     """
-    s3_client.abort_multipart_upload(Bucket=BUCKET_NAME, Key=key, UploadId=upload_id)
+    s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
+
+
+def generate_download_url(bucket_name: str, key: str, expiration: int = 3600) -> str:
+    """
+    Generate a download url, for the given s3 object, with the given validity
+    """
+    return s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': bucket_name, 'Key': key},
+        ExpiresIn=expiration
+    )
 
 
 if __name__ == "__main__":
