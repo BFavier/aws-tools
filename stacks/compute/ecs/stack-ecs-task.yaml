@@ -61,7 +61,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-  DefaultRunnerPolicy:  # this is the role endorsed from the docker image that runs the entrypoint
+  DefaultRunnerPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub ${AWS::StackName}-DefaultRunnerPolicy
@@ -74,7 +74,7 @@ Resources:
               - logs:CreateLogStream
               - logs:PutLogEvents
             Resource: "*"
-  RunnerRole:
+  RunnerRole:  # this is the role endorsed from the docker image that runs the entrypoint
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub ${AWS::StackName}-RunnerRole
@@ -142,3 +142,5 @@ Resources:
 Outputs:
   TaskDefinitionArn:
     Value: !Ref TaskDefinition
+  RunnerRoleArn:
+    Value: !GetAtt RunnerRole.Arn
