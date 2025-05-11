@@ -171,7 +171,7 @@ def move_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, n
 
 def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'application/octet-stream') -> str:
     """
-    Initiate a multipart upload
+    Initiate a multipart upload by returning an 'upload_id'
     """
     response = s3_client.create_multipart_upload(
         Bucket=BUCKET_NAME,
@@ -181,14 +181,16 @@ def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'a
     return response['UploadId']
 
 
-def generate_presigned_url_for_part(key: str, upload_id: str, part_number: int, expiration=3600) -> str:
+def generate_presigned_url_for_part(bucket_name: str, key: str, upload_id: str, part_number: int, expiration=3600) -> str:
     """
-    Returns a presigned url
+    Returns a presigned url, that must be called with PUT request for a part of the multipart upload.
+    The 'part_number' must start indexing at 1.
+    You must save the ETag header of the response in an array to complete upload later.
     """
     return s3_client.generate_presigned_url(
         'upload_part',
         Params={
-            'Bucket': BUCKET_NAME,
+            'Bucket': bucket_name,
             'Key': key,
             'UploadId': upload_id,
             'PartNumber': part_number
@@ -197,20 +199,22 @@ def generate_presigned_url_for_part(key: str, upload_id: str, part_number: int, 
     )
 
 
-def complete_multipart_upload(key: str, upload_id: str, parts: list[dict]):
+def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_tags: list[str]):
     """
-    parts: list of {'ETag': ..., 'PartNumber': ...} from client
+    Complete a multipart upload
+    parts: list of ('ETag': ..., 'PartNumber': ...} from client
     """
     return s3_client.complete_multipart_upload(
-        Bucket=BUCKET_NAME,
+        Bucket=bucket_name,
         Key=key,
         UploadId=upload_id,
-        MultipartUpload={'Parts': parts}
+        MultipartUpload={'Parts': [{'ETag': e_tag, 'PartNumber': part_number} for part_number, e_tag in enumerate(part_tags, start=1)]}
     )
 
 
 def abort_multipart_upload():
     """
+    Abort an existing upload
     """
     s3_client.abort_multipart_upload(Bucket=BUCKET_NAME, Key=key, UploadId=upload_id)
 
