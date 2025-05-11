@@ -181,22 +181,18 @@ def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'a
     return response['UploadId']
 
 
-def generate_url_for_part_upload(bucket_name: str, key: str, upload_id: str, part_number: int, expiration=3600) -> str:
+def upload_part(bucket_name: str, key: str, upload_id: str, part_number: int, chunk: bytes) -> str:
     """
-    Returns a presigned url, that must be called with PUT request for a part of the multipart upload.
-    The 'part_number' must start indexing at 1.
-    You must save the ETag header of the response in an array to complete upload later.
+    Uploads part of a multipart upload. Returns the corresponding part ETag.
+    Part number must start indexing at 1.
     """
-    return s3_client.generate_presigned_url(
-        'upload_part',
-        Params={
-            'Bucket': bucket_name,
-            'Key': key,
-            'UploadId': upload_id,
-            'PartNumber': part_number
-        },
-        ExpiresIn=expiration
-    )
+    return s3_client.upload_part(
+        Bucket=bucket_name,
+        Key=key,
+        PartNumber=part_number,
+        UploadId=upload_id,
+        Body=chunk
+    )["ETag"]
 
 
 def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_tags: list[str]):
