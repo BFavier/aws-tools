@@ -102,6 +102,7 @@ Resources:
     Type: Custom::SetLifecycle
     DependsOn: LifecycleFunction
     Properties:
+      ServiceToken: !GetAtt LifecycleFunction.Arn  # This is not used but required
       RuleId: !Sub "${AWS::StackName}-LifecycleRule"
       BucketName: !Ref BucketName
       Prefix: !Ref Prefix

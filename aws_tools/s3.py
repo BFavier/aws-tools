@@ -202,7 +202,7 @@ def generate_presigned_url_for_part(bucket_name: str, key: str, upload_id: str, 
 def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_tags: list[str]):
     """
     Complete a multipart upload
-    parts: list of ('ETag': ..., 'PartNumber': ...} from client
+    parts: list of 'ETag' from client
     """
     return s3_client.complete_multipart_upload(
         Bucket=bucket_name,
