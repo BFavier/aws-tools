@@ -10,16 +10,46 @@ Parameters:
       - IMMUTABLE
       - MUTABLE
     Default: IMMUTABLE
+  AutoDeleteUntagged:
+    Type: String
+    Description: Whether to create a lifecycle rule to automaticaly delete
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
 
+Conditions:
+  DeleteUntaggedLifecycle: !Equals ['true', !Ref AutoDeleteUntagged]
 
 Resources:
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-        RepositoryName: !Ref RepositoryName
-        ImageTagMutability: IMMUTABLE
-        ImageScanningConfiguration:
-            scanOnPush: true
+      RepositoryName: !Ref RepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+          scanOnPush: true
+      LifecyclePolicy: !If
+        - DeleteUntaggedLifecycle
+        - LifecyclePolicyText: !Sub |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Remove untagged images after 1 day",
+                  "selection": {
+                    "tagStatus": "untagged",
+                    "countType": "sinceImagePushed",
+                    "countUnit": "days",
+                    "countNumber": 1
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+        - !Ref AWS::NoValue
 
 Outputs:
   RepositoryName:
