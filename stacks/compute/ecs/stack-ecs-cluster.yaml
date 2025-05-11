@@ -68,7 +68,6 @@ Resources:
         - !Ref ECSInstanceRole
   RunnerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
-    Condition: IsEc2Cluster
     Properties:
       GroupDescription: Security group for runners
       VpcId: !Ref VpcId
@@ -161,3 +160,5 @@ Resources:
 Outputs:
   ClusterName:
     Value: !Ref ECSCluster
+  SecurityGroupArn:
+    Value: !Ref RunnerSecurityGroup
