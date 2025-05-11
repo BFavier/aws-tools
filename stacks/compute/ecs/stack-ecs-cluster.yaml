@@ -160,5 +160,5 @@ Resources:
 Outputs:
   ClusterName:
     Value: !Ref ECSCluster
-  SecurityGroupArn:
+  SecurityGroupId:
     Value: !Ref RunnerSecurityGroup
