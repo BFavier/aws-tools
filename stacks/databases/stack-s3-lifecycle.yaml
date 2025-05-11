@@ -1,0 +1,113 @@
+Parameters:
+  BucketName:
+    Type: String
+    Description: The name of the bucket to implement the lifecycle rule into
+
+  Prefix:
+    Type: String
+    Default: ""
+    Description: Prefix for the S3 bucket where the files will expire after the fixed duration
+  ExpirationDays:
+    Type: Number
+    Default: '31'
+    Description: Number of days after which any file created in the bucket starting with the prefix will be deleted automatically.
+
+
+Resources:
+  LifecycleFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SetLifecycleLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-SetLifecycle"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LifecycleRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          s3 = boto3.client("s3")
+
+          def handler(event, context):
+              try:
+                  props = event["ResourceProperties"]
+                  bucket = props["BucketName"]
+                  prefix = props["Prefix"]
+                  rule_id = props["RuleId"]
+                  expiration_days = props["ExpirationDays"]
+
+                  # Get existing config if it exists
+                  try:
+                      existing = s3.get_bucket_lifecycle_configuration(Bucket=bucket)
+                      rules = existing.get("Rules", [])
+                  except s3.exceptions.ClientError as e:
+                      if e.response["Error"]["Code"] == "NoSuchLifecycleConfiguration":
+                          rules = []
+                      else:
+                          raise
+
+                  # If the rule must be preemptively deleted
+                  if event["RequestType"] == "Update" or event["RequestType"] == "Delete":
+                      # Remove old rule if it exists
+                      rules = [r for r in rules if r.get("ID") != rule_id]
+
+                  # Add the rule
+                  if not any(r.get("ID") == rule_id for r in rules) and event["RequestType"] != "Delete":
+                      rules.append({
+                          "ID": rule_id,
+                          "Prefix": prefix,
+                          "Status": "Enabled",
+                          "Expiration": {"Days": int(expiration_days)}
+                      })
+
+                      s3.put_bucket_lifecycle_configuration(
+                          Bucket=bucket,
+                          LifecycleConfiguration={"Rules": rules}
+                      )
+
+              except Exception as e:
+                  print("Error:", e)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                  return
+
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+      Timeout: 60
+  LifecycleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3LifecyclePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetLifecycleConfiguration
+                  - s3:PutLifecycleConfiguration
+                Resource: !Sub "arn:aws:s3:::${BucketName}"
+              - Effect: Allow
+              
+                Action:
+                  - logs:*
+                Resource: "*"
+  SetLifecyclePolicy:
+    Type: Custom::SetLifecycle
+    DependsOn: LifecycleFunction
+    Properties:
+      RuleId: !Sub "${AWS::StackName}-LifecycleRule"
+      BucketName: !Ref BucketName
+      Prefix: !Ref Prefix
+      ExpirationDays: !Ref ExpirationDays
+  SetLifecycleLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-SetLifecycle"
+      RetentionInDays: 30

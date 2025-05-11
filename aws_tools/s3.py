@@ -169,6 +169,52 @@ def move_object(bucket_name: str, key: str|pathlib.Path, new_bucket_name: str, n
         delete_object(bucket_name, key)
 
 
+def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'application/octet-stream') -> str:
+    """
+    Initiate a multipart upload
+    """
+    response = s3_client.create_multipart_upload(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ContentType=content_type
+    )
+    return response['UploadId']
+
+
+def generate_presigned_url_for_part(key: str, upload_id: str, part_number: int, expiration=3600) -> str:
+    """
+    Returns a presigned url
+    """
+    return s3_client.generate_presigned_url(
+        'upload_part',
+        Params={
+            'Bucket': BUCKET_NAME,
+            'Key': key,
+            'UploadId': upload_id,
+            'PartNumber': part_number
+        },
+        ExpiresIn=expiration
+    )
+
+
+def complete_multipart_upload(key: str, upload_id: str, parts: list[dict]):
+    """
+    parts: list of {'ETag': ..., 'PartNumber': ...} from client
+    """
+    return s3_client.complete_multipart_upload(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        UploadId=upload_id,
+        MultipartUpload={'Parts': parts}
+    )
+
+
+def abort_multipart_upload():
+    """
+    """
+    s3_client.abort_multipart_upload(Bucket=BUCKET_NAME, Key=key, UploadId=upload_id)
+
+
 if __name__ == "__main__":
     import IPython
     IPython.embed()
