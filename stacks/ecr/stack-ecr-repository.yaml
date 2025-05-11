@@ -10,6 +10,13 @@ Parameters:
       - IMMUTABLE
       - MUTABLE
     Default: IMMUTABLE
+  IsPublic:
+    Type: String
+    Description: Whether the ECR repository should be public or private
+    AllowedValues:
+      - true
+      - false
+    Default: false
   AutoDeleteUntagged:
     Type: String
     Description: Whether to create a lifecycle rule to automaticaly delete
@@ -19,6 +26,7 @@ Parameters:
     Default: 'true'
 
 Conditions:
+  IsPublicRepo: !Equals [!Ref IsPublic, 'true']
   DeleteUntaggedLifecycle: !Equals ['true', !Ref AutoDeleteUntagged]
 
 Resources:
@@ -50,6 +58,14 @@ Resources:
               ]
             }
         - !Ref AWS::NoValue
+
+  PublicECRRepository:
+    Type: AWS::ECR::PublicRepository
+    Condition: IsPublicRepo
+    Properties:
+      RepositoryName: !Ref RepositoryName
+      RepositoryCatalogData:
+        Description: ''
 
 Outputs:
   RepositoryName:
