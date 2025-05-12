@@ -14,7 +14,7 @@ class DynamoDBException(Exception):
     pass
 
 
-def _recursive_convert(item: object, to_decimal: bool) -> object:
+def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=6) -> object:
     """
     replace floats with Decimal objects recursively in a dict
     """
@@ -25,7 +25,11 @@ def _recursive_convert(item: object, to_decimal: bool) -> object:
     elif isinstance(item, dict):
         return {k: _recursive_convert(v, to_decimal) for k, v in item.items() if v != set()}  # remove keys corresponding to empty sets
     elif isinstance(item, (int, float)) and to_decimal:
-        return Decimal(item)
+        number = str(round(item, 6))
+        if "." in number:
+            int_part, decimal_part = number.split(".")
+            number = f"{int_part}.{decimal_part[:n_decimals]}"
+        return Decimal(number)
     elif isinstance(item, Decimal) and not to_decimal:
         return float(item) if item % 1 != 0 else int(item)
     elif item is None or type(item) in [str, bool]:
