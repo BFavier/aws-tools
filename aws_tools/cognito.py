@@ -71,7 +71,7 @@ def confirm_signup_email(pool_client: str, user: str, confirmation_code: str):
 
 def send_confirmation_code(access_token: str, medium: Literal["email", "phone_number"]):
     """
-    send a confirmation sms or email to verify that user has access to it
+    send (or resend) a confirmation sms or email to verify that user has access to it
     """
     cognito.get_user_attribute_verification_code(
         AccessToken=access_token,
@@ -213,9 +213,9 @@ def admin_delete_user(user_pool: str, user: str):
     cognito.admin_delete_user(UserPoolId=user_pool, Username=user)
 
 
-def admin_resend_confirm_email(user_pool: str, user: str):
+def admin_resend_confirmation_email(user_pool: str, user: str):
     """
-    reset the password of an user, generates a new one he will receive by email
+    Only works if the user is in 'FORCE_CHANGE_PASSWORD' state (has just been created and never logged in)
     """
     try:
         cognito.admin_create_user(
