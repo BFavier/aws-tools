@@ -613,7 +613,7 @@ def update_item(
         raise DynamoDBException(f"The item '{key}' from table '{table.name}' does not exist")
     except ClientError as e:
         if e.response["Error"]["Code"] == "ValidationException":
-            raise DynamoDBException(f"Some part of the field paths do not exist for item '{key}' from table '{table.name}'")
+            raise DynamoDBException(str(e))
         else:
             raise
     if not return_object:
