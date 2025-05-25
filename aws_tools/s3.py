@@ -181,7 +181,7 @@ def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'a
     return response['UploadId']
 
 
-def upload_part(bucket_name: str, key: str, upload_id: str, part_number: int, chunk: bytes) -> str:
+def upload_part(bucket_name: str, key: str, multipart_upload_id: str, part_number: int, chunk: bytes) -> str:
     """
     Uploads part of a multipart upload. Returns the corresponding part ETag.
     Part number must start indexing at 1.
@@ -190,29 +190,29 @@ def upload_part(bucket_name: str, key: str, upload_id: str, part_number: int, ch
         Bucket=bucket_name,
         Key=key,
         PartNumber=part_number,
-        UploadId=upload_id,
+        UploadId=multipart_upload_id,
         Body=chunk
     )["ETag"]
 
 
-def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_tags: list[str]):
+def complete_multipart_upload(bucket_name: str, key: str, multipart_upload_id: str, part_tags: list[str]):
     """
     Complete a multipart upload
     parts: list of 'ETag' from client
     """
-    return s3_client.complete_multipart_upload(
+    s3_client.complete_multipart_upload(
         Bucket=bucket_name,
         Key=key,
-        UploadId=upload_id,
+        UploadId=multipart_upload_id,
         MultipartUpload={'Parts': [{'ETag': e_tag, 'PartNumber': part_number} for part_number, e_tag in enumerate(part_tags, start=1)]}
     )
 
 
-def abort_multipart_upload(bucket_name: str, key: str, upload_id: str):
+def abort_multipart_upload(bucket_name: str, key: str, multipart_upload_id: str):
     """
     Abort an existing upload
     """
-    s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
+    s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=multipart_upload_id)
 
 
 def generate_download_url(bucket_name: str, key: str, expiration: int = 3600) -> str:
