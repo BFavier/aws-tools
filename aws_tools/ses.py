@@ -6,8 +6,8 @@ You can find some examples here:
 https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-examples.html
 """
 import boto3
-from pydantic import BaseModel, Field
-from typing import Literal
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Literal, Union
 
 
 ses = boto3.client("ses")
@@ -27,6 +27,15 @@ def send_email(sender_email: str, recipient_emails: list[str], subject: str, bod
             'Body': {'Text': {'Data': body},}
         }
     )
+
+
+
+class _SESEvent(BaseModel):
+    """
+    base class for SES related events
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
 
 
 class Mail(BaseModel):
@@ -62,7 +71,7 @@ class Recipient(BaseModel):
     emailAddress: str
 
 
-class BounceEvent(BaseModel):
+class BounceEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-bounce-object
     """
@@ -85,7 +94,7 @@ class BounceEvent(BaseModel):
     reportingMTA: str | None = None
 
 
-class ComplaintEvent(BaseModel):
+class ComplaintEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-complaint-object
     """
@@ -99,7 +108,7 @@ class ComplaintEvent(BaseModel):
     arrivalDate: str | None = None
 
 
-class DeliveryEvent(BaseModel):
+class DeliveryEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-delivery-object
     """
@@ -111,21 +120,21 @@ class DeliveryEvent(BaseModel):
     remoteMtaIp: str
 
 
-class SendEvent(BaseModel):
+class SendEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-send-object
     """
     pass
 
 
-class RejectEvent(BaseModel):
+class RejectEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-reject-object
     """
     reason: Literal["Bad content"]
 
 
-class OpenEvent(BaseModel):
+class OpenEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-open-object
     """
@@ -134,15 +143,18 @@ class OpenEvent(BaseModel):
     userAgent: str
 
 
-class ClickEvent(OpenEvent):
+class ClickEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-click-object
     """
+    ipAddress: str
+    timestamp: str
+    userAgent: str
     link: str
     linkTags: dict[str, list[str]]
 
 
-class RenderingFailureEvent(BaseModel):
+class RenderingFailureEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-failure-object
     """
@@ -150,12 +162,12 @@ class RenderingFailureEvent(BaseModel):
     errorMessage: str
 
 
-class DeliveryDelayEvent(BaseModel):
+class DeliveryDelayEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-delivery-delay-object
     """
 
-    class DelayedRecipients(Recipient):
+    class DelayedRecipients(BaseModel):
         """
         https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-delivery-delay-object-recipients
         """
@@ -169,7 +181,7 @@ class DeliveryDelayEvent(BaseModel):
     reportingMTA: str | None = None
 
 
-class SubscriptionEvent(BaseModel):
+class SubscriptionEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-subscription-object
     """
@@ -195,7 +207,7 @@ class SubscriptionEvent(BaseModel):
     oldTopicPreferences: TopicPreferences
 
 
-class SentEmailEvent(BaseModel):
+class SentEmailEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-top-level-json-object
     """
@@ -211,3 +223,7 @@ class SentEmailEvent(BaseModel):
     failure: RenderingFailureEvent | None = None
     deliveryDelay: DeliveryDelayEvent | None = None
     subscription: SubscriptionEvent | None = None
+
+
+EventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SentEmailEvent]
+assert set(_SESEvent.__subclasses__()) == set(EventTypes.__args__)

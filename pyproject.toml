@@ -7,13 +7,12 @@ name = "aws-tools"
 dynamic = ["version"]
 requires-python = ">= 3.12"
 dependencies = [
-  "boto3 >= 1.35.10"
+  "aioboto3 >= 14.3.0"
 ]
 
 [project.optional-dependencies]
 dev = [
   "pydantic >= 2.10.5",
-  "aiohttp >= 3.10.10",
   "requests >= 2.32.3",
   "cryptography >= 43.0.1",
 ]
