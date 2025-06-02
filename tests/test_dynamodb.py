@@ -5,26 +5,7 @@ from aws_tools.dynamodb import list_tables, get_table_keys, table_exists, create
 from aws_tools.dynamodb import item_exists, get_item, put_item, batch_put_items, delete_item, batch_delete_items, update_item, get_item_fields
 from aws_tools.dynamodb import scan_items, query_items, Scan, Query, Attr, Decimal
 from aws_tools.dynamodb import DynamoDBException
-
-
-class check_fail:
-    """
-    Context that exit silently at the first error.
-    If there was no error on leaving the context, raise one.
-    """
-
-    def __init__(self, exception_type: type[Exception] = Exception):
-        self.exception_type = exception_type
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if isinstance(exc_value, self.exception_type):
-            return True
-        elif exc_value is not None:
-            raise exc_value
-        raise RuntimeError("This should have raised an error.")
+from aws_tools._check_fail_context import check_fail
 
 
 class DynamoDBTest(unittest.TestCase):
