@@ -94,7 +94,7 @@ def _generate_sync_module(module_name: str) -> str:
     original_path = pathlib.Path(module.__file__)
     assert "_async" in original_path.stem
     path = original_path.with_stem(original_path.stem.replace("_async", ""))
-    module_path = f"aws_tools.{original_path.stem}"
+    module_path = f"{module.__package__}.{original_path.stem}"
     with open(path, "w") as f:
         f.write(f"\"\"\"\nThis module was automatically generated from {module_path}\n\"\"\"\n")
         f.write(f"from {__name__} import _run_async, _async_iter_to_sync\n")

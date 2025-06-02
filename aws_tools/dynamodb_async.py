@@ -2,7 +2,7 @@ import typing
 import boto3
 import aioboto3
 from operator import __and__
-from typing import Type, Literal, Iterable
+from typing import Type, Literal, Iterable, AsyncIterable
 from decimal import Decimal
 from boto3.dynamodb.conditions import ConditionBase, Key, Attr
 from botocore.exceptions import ClientError
@@ -417,31 +417,28 @@ async def scan_items_async(
         return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
-class Scan:
-    """
-    Exposes a generator to iterate over all items in a table.
-    """
-
-    def __init__(self,
+async def scan_all_items_async(
             table_name: str,
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 1_000,
         ):
-        self.kwargs = dict(
-            table_name=table_name,
-            conditions=conditions,
-            subset=subset,
-            page_size=page_size
-        )
-    
-    def __iter__(self) -> Iterable[dict]:
-        next_page_token = None
-        while True:
-            items, next_page_token = _run_async(scan_items_async(page_start_token=next_page_token, **self.kwargs))
-            yield from items
-            if next_page_token is None:
-                break
+    """
+    Return all the items returned by a scan operation, handling pagination
+    """
+    kwargs = dict(
+        table_name=table_name,
+        conditions=conditions,
+        subset=subset,
+        page_size=page_size
+    )
+    next_page_token = None
+    while True:
+        items, next_page_token = await scan_items_async(page_start_token=next_page_token, **kwargs)
+        for item in items:
+            yield item
+        if next_page_token is None:
+            break
 
 
 async def query_items_async(
@@ -534,37 +531,34 @@ async def query_items_async(
         return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
-class Query:
+async def query_all_items_async(
+        table_name: str,
+        hash_key: object,
+        sort_key_filter: str | tuple[object|None, object|None] = (None, None),
+        ascending: bool=True,
+        conditions: ConditionBase | None = None,
+        subset: list[str] | None = None,
+        page_size: int | None = 1_000
+    ) -> AsyncIterable[dict]:
     """
-    Exposes a generator to iterate over queried items in a table.
+    Iterate over all the results of a query, handling pagination
     """
-
-    def __init__(self,
-            table_name: str,
-            hash_key: object,
-            sort_key_filter: str | tuple[object|None, object|None] = (None, None),
-            ascending: bool=True,
-            conditions: ConditionBase | None = None,
-            subset: list[str] | None = None,
-            page_size: int | None = 1_000
-        ):
-        self.kwargs = dict(
-            table_name=table_name,
-            hash_key=hash_key,
-            sort_key_filter=sort_key_filter,
-            ascending=ascending,
-            conditions=conditions,
-            subset=subset,
-            page_size=page_size
-        )
-
-    def __iter__(self) -> Iterable[dict]:
-        next_page_token = None
-        while True:
-            items, next_page_token = _run_async(query_items_async(page_start_token=next_page_token, **self.kwargs))
-            yield from items
-            if next_page_token is None:
-                break
+    kwargs = dict(
+        table_name=table_name,
+        hash_key=hash_key,
+        sort_key_filter=sort_key_filter,
+        ascending=ascending,
+        conditions=conditions,
+        subset=subset,
+        page_size=page_size
+    )
+    next_page_token = None
+    while True:
+        items, next_page_token = await query_items_async(page_start_token=next_page_token, **kwargs)
+        for item in items:
+            yield item
+        if next_page_token is None:
+            break
 
 
 async def update_item_async(
