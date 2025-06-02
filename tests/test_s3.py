@@ -18,7 +18,7 @@ class DynamoDBTest(unittest.TestCase):
         cls.bucket_name = "unit-test-"+str(uuid4())
         create_bucket(cls.bucket_name)
         with open(data_path / "sample_file.json", "r") as f:
-            cls.data = f.read()
+            cls.data = f.read().encode()
 
     @classmethod
     def tearDownClass(cls):
@@ -58,7 +58,7 @@ class DynamoDBTest(unittest.TestCase):
         assert object_exists(self.bucket_name, key)
         assert list(list_objects(self.bucket_name, "")) == [key]
         assert get_object_bytes_size(self.bucket_name, key) == len(self.data)
-        assert download_data(self.bucket_name, key) == self.data.encode()
+        assert download_data(self.bucket_name, key) == self.data
         # delete the file
         delete_object(self.bucket_name, key)
         assert not object_exists(self.bucket_name, key)
@@ -72,9 +72,14 @@ class DynamoDBTest(unittest.TestCase):
         assert set(list_objects(self.bucket_name, "")) == {key, "empty_file.json"}
         assert get_object_bytes_size(self.bucket_name, "empty_file.json") == 0
         # move objects
-        move_object(self.bucket_name, key, self.bucket_name, missing_key, blocking=True)
+        move_object(self.bucket_name, key, self.bucket_name, missing_key)
         assert not object_exists(self.bucket_name, key)
         assert object_exists(self.bucket_name, missing_key)
+        # copy object
+        copy_object(self.bucket_name, missing_key, self.bucket_name, key)
+        assert object_exists(self.bucket_name, key)
+        assert object_exists(self.bucket_name, missing_key)
+        assert download_data(self.bucket_name, key)
         # delete multiple files
         delete_objects(self.bucket_name, prefix="")
         assert list(list_objects(self.bucket_name, "")) == []

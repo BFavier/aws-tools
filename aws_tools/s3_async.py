@@ -3,23 +3,16 @@ tracemalloc.start()
 
 import os
 import pathlib
-import boto3
 import aioboto3
-import threading
 from typing import Iterator, Callable, Optional, AsyncIterator
 from botocore.exceptions import ClientError
-from boto3.s3.transfer import TransferManager, TransferConfig
-from s3transfer.futures import TransferFuture
 
 
 session = aioboto3.Session()
-s3_resource = boto3.resource('s3')
-s3_client = boto3.client("s3")
 
 
 class S3Exception(Exception):
     pass
-
 
 
 async def create_bucket_async(bucket_name: str, region: str | None=None):
@@ -216,68 +209,46 @@ async def delete_objects_async(bucket_name: str, prefix: str | pathlib.Path, cal
                 callback(object_key=obj["Key"])
 
 
-def copy_object(
-        bucket_name: str,
-        key: str | pathlib.Path,
-        new_bucket_name: str,
-        new_key: str | pathlib.Path,
-        blocking: bool=False,
-        callback: Callable[[TransferFuture], None] | None = None
-    ) -> TransferFuture:
+async def copy_object_async(
+    source_bucket: str,
+    source_key: str,
+    dest_bucket: str,
+    dest_key: str
+):
     """
-    Copy an object without downloading it. Can handle very big files, and can be non-blocking.
+    Copy an object within S3.
     """
-    s3_client = boto3.client("s3")
-    transfer_config = TransferConfig(multipart_threshold=100 * 1024**2)  # 100 MB chunks
-    tm = TransferManager(s3_client, config=transfer_config)
-    future = tm.copy(
-        copy_source={'Bucket': bucket_name, 'Key': key.as_posix() if isinstance(key, pathlib.Path) else key},
-        bucket=new_bucket_name,
-        key=new_key.as_posix() if isinstance(new_key, pathlib.Path) else new_key
-    )
-
-    def handle_completion():
-        future.result()
-        if callback:
-            callback(future)
-        tm.shutdown()
-
-    if blocking:
-        handle_completion()
-    else:
-        threading.Thread(target=handle_completion, daemon=True).start()
-    return future
+    async with session.client("s3") as s3:
+        copy_source = {"Bucket": source_bucket, "Key": source_key}
+        await s3.copy_object(
+            Bucket=dest_bucket,
+            Key=dest_key,
+            CopySource=copy_source
+        )
 
 
-def delete_object(bucket_name: str, key: str | pathlib.Path):
+async def delete_object_async(
+    bucket_name: str,
+    key: str
+):
     """
-    Delete an object, with immediate effect whatever the size of the object
+    Delete an object from S3.
     """
-    s3_resource = boto3.resource('s3')
-    obj = s3_resource.Object(bucket_name, key.as_posix() if isinstance(key, pathlib.Path) else key)
-    obj.delete()
+    async with session.client("s3") as s3:
+        await s3.delete_object(Bucket=bucket_name, Key=key)
 
 
-def move_object(
-        bucket_name: str,
-        key: str | pathlib.Path,
-        new_bucket_name: str,
-        new_key: str | pathlib.Path,
-        blocking: bool=False
-    ):
+async def move_object_async(
+    source_bucket: str,
+    source_key: str,
+    dest_bucket: str,
+    dest_key: str
+):
     """
-    Move an s3 object
+    Move an object in S3 by copying and then deleting.
     """
-    copy_object(
-        bucket_name,
-        key,
-        new_bucket_name,
-        new_key,
-        blocking=blocking,
-        callback=(lambda future: delete_object(bucket_name, key)) if not blocking else None
-    )
-    if blocking:
-        delete_object(bucket_name, key)
+    await copy_object_async(source_bucket, source_key, dest_bucket, dest_key)
+    await delete_object_async(source_bucket, source_key)
 
 
 async def initiate_multipart_upload_async(bucket_name: str, key: str, content_type: str = 'application/octet-stream') -> str:

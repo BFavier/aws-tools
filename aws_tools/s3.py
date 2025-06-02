@@ -2,7 +2,7 @@
 This module was automatically generated from aws_tools.s3_async
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync
-from aws_tools.s3_async import os, pathlib, boto3, aioboto3, Iterator, Callable, Optional, AsyncIterator, ClientError, TransferManager, TransferConfig, TransferFuture, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, delete_objects_async, copy_object, delete_object, move_object, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async
+from aws_tools.s3_async import tracemalloc, os, pathlib, aioboto3, Iterator, Callable, Optional, AsyncIterator, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async
 
 
 def list_objects(bucket_name: str, prefix: str | pathlib.Path = '') -> AsyncIterator:
@@ -31,6 +31,14 @@ def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_t
 
 
 
+def copy_object(source_bucket: str, source_key: str, dest_bucket: str, dest_key: str):
+    """
+    Copy an object within S3.
+    """
+    return _run_async(copy_object_async(source_bucket=source_bucket, source_key=source_key, dest_bucket=dest_bucket, dest_key=dest_key))
+
+
+
 def create_bucket(bucket_name: str, region: str | None = None):
     """
     Create a bucket
@@ -44,6 +52,14 @@ def delete_bucket(bucket_name: str):
     Delete an existing bucket
     """
     return _run_async(delete_bucket_async(bucket_name=bucket_name))
+
+
+
+def delete_object(bucket_name: str, key: str):
+    """
+    Delete an object from S3.
+    """
+    return _run_async(delete_object_async(bucket_name=bucket_name, key=key))
 
 
 
@@ -79,7 +95,7 @@ def generate_download_url(bucket_name: str, key: str, expiration: int = 3600) ->
 
 
 
-def get_object_bytes_size(bucket_name: str, key: str) -> int | None:
+def get_object_bytes_size(bucket_name: str, key: str) -> int:
     """
     Returns the object size in bytes, or None if it does not exists
     """
@@ -89,6 +105,14 @@ def get_object_bytes_size(bucket_name: str, key: str) -> int | None:
 
 def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'application/octet-stream') -> str:
     return _run_async(initiate_multipart_upload_async(bucket_name=bucket_name, key=key, content_type=content_type))
+
+
+
+def move_object(source_bucket: str, source_key: str, dest_bucket: str, dest_key: str):
+    """
+    Move an object in S3 by copying and then deleting.
+    """
+    return _run_async(move_object_async(source_bucket=source_bucket, source_key=source_key, dest_bucket=dest_bucket, dest_key=dest_key))
 
 
 
