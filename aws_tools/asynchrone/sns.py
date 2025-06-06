@@ -2,9 +2,9 @@
 Here below the documentation of the expected payload format for the API route handling SNS topic subscription :
 https://docs.aws.amazon.com/sns/latest/dg/sns-message-and-json-formats.html
 """
-import importlib.util
 import base64
-import boto3
+import aiohttp
+from aiobotocore.session import get_session
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import load_pem_x509_certificate, Certificate
@@ -14,16 +14,7 @@ from pydantic import BaseModel
 from typing import Literal, Annotated, Union
 
 
-sns = boto3.client("sns")
-
-
-def send_sms(phone_number: str, message: str):
-    """
-    """
-    sns.publish(
-        PhoneNumber=phone_number,
-        Message=message
-    )
+session = get_session()
 
 
 # custome sns headers, dcoumented here: https://docs.aws.amazon.com/sns/latest/dg/http-header.html
@@ -35,7 +26,11 @@ HEADERS = [
 ]
 
 
-class SNSSubscriptionConfirmationRequest(BaseModel):
+class _SNSEvents(BaseModel):
+    pass
+
+
+class SNSSubscriptionConfirmationRequest(_SNSEvents):
     """
     https://docs.aws.amazon.com/sns/latest/dg/http-subscription-confirmation-json.html
     """
@@ -51,7 +46,7 @@ class SNSSubscriptionConfirmationRequest(BaseModel):
     SigningCertURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/SimpleNotificationService-f3ecfb7224c7233fe7bb5f59f96de52f.pem"]
 
 
-class SNSNotificationRequest(BaseModel):
+class SNSNotificationRequest(_SNSEvents):
     """
     https://docs.aws.amazon.com/sns/latest/dg/http-notification-json.html
     """
@@ -67,7 +62,7 @@ class SNSNotificationRequest(BaseModel):
     UnsubscribeURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:us-west-2:123456789012:MyTopic:c9135db0-26c4-47ec-8998-413945fb5a96"]
 
 
-class SNSUnsubscribeRequest(BaseModel):
+class SNSUnsubscribeRequest(_SNSEvents):
     """
     https://docs.aws.amazon.com/sns/latest/dg/http-unsubscribe-confirmation-json.html
     """
@@ -84,6 +79,17 @@ class SNSUnsubscribeRequest(BaseModel):
 
 
 RequestPayloadTypes = Union[SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest]
+assert set(_SNSEvents.__subclasses__()) == set(RequestPayloadTypes.__args__)
+
+
+async def send_sms_async(phone_number: str, message: str):
+    """
+    """
+    async with session.create_client("sns") as sns:
+        await sns.publish(
+            PhoneNumber=phone_number,
+            Message=message
+        )
 
 
 def _is_valid_cert_url(cert_url: str) -> bool:
@@ -107,81 +113,40 @@ def _get_signed_string(message: RequestPayloadTypes) -> str:
     return string_to_sign
 
 
-if importlib.util.find_spec("aiohttp"):
-    import aiohttp
+async def _get_signing_certificate_async(cert_url: str) -> Certificate:
+    """
+    Download the certificate from the SigningCertURL
+    """
+    async with aiohttp.ClientSession() as session:
+        async with session.get(cert_url) as response:
+            cert_data = await response.read()
+    return load_pem_x509_certificate(cert_data, default_backend())
 
-    async def _get_signing_certificate_async(cert_url: str) -> Certificate:
-        """
-        Download the certificate from the SigningCertURL
-        """
-        async with aiohttp.ClientSession() as session:
-            async with session.get(cert_url) as response:
-                cert_data = await response.read()
-        return load_pem_x509_certificate(cert_data, default_backend())
 
-    async def verify_sns_signature_async(body: RequestPayloadTypes) -> bool:
-        """
-        Verify the signature of an SNS message
-        https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html
-        """
-        if not _is_valid_cert_url(body.SigningCertURL):
-            return False
-        decoded_signature = base64.b64decode(body.Signature)
-        cert = await _get_signing_certificate_async(body.SigningCertURL)
-        public_key = cert.public_key()
-        if body.SignatureVersion == "1":
-            hash = hashes.SHA1()
-        elif body.SignatureVersion == "2":
-            hash = hashes.SHA256()
-        else:
-            raise RuntimeError(f"Unexpected signature version '{body.SignatureVersion}'")
-        try:
-            public_key.verify(
-                decoded_signature,
-                _get_signed_string(body).encode("utf-8"),
-                padding.PKCS1v15(),
-                hash
-            )
-        except Exception as e:
-            return False
-        else:
-            return True
-
-if importlib.util.find_spec("requests"):
-    import requests
-
-    def _get_signing_certificate(cert_url: str) -> Certificate:
-        """
-        Download the certificate from the SigningCertURL
-        """
-        response: requests.Response = requests.get(cert_url)
-        cert_data = response.content
-        return load_pem_x509_certificate(cert_data, default_backend())
-
-    def verify_sns_signature(body: RequestPayloadTypes) -> bool:
-        """
-        Verify the signature of an SNS message
-        https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html
-        """
-        if not _is_valid_cert_url(body.SigningCertURL):
-            return False
-        decoded_signature = base64.b64decode(body.Signature)
-        cert = _get_signing_certificate(body.SigningCertURL)
-        public_key = cert.public_key()
-        if body.SignatureVersion == "1":
-            hash = hashes.SHA1()
-        elif body.SignatureVersion == "2":
-            hash = hashes.SHA256()
-        else:
-            raise RuntimeError(f"Unexpected signature version '{body.SignatureVersion}'")
-        try:
-            public_key.verify(
-                decoded_signature,
-                _get_signed_string(body).encode("utf-8"),
-                padding.PKCS1v15(),
-                hash
-            )
-        except Exception as e:
-            return False
-        else:
-            return True
+async def verify_sns_signature_async(body: RequestPayloadTypes) -> bool:
+    """
+    Verify the signature of an SNS message
+    https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html
+    """
+    if not _is_valid_cert_url(body.SigningCertURL):
+        return False
+    decoded_signature = base64.b64decode(body.Signature)
+    cert = await _get_signing_certificate_async(body.SigningCertURL)
+    public_key = cert.public_key()
+    if body.SignatureVersion == "1":
+        hash = hashes.SHA1()
+    elif body.SignatureVersion == "2":
+        hash = hashes.SHA256()
+    else:
+        raise RuntimeError(f"Unexpected signature version '{body.SignatureVersion}'")
+    try:
+        public_key.verify(
+            decoded_signature,
+            _get_signed_string(body).encode("utf-8"),
+            padding.PKCS1v15(),
+            hash
+        )
+    except Exception as e:
+        return False
+    else:
+        return True

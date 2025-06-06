@@ -28,11 +28,19 @@ Parameters:
       - B
     Default: S
     Description: Same as HashKeyType, but for the RANGE key
+  TTLAttributeName:
+    Type: String
+    Default: ''
+    Description: Name of the TTL (Time to Live) attribute
 
 Conditions:
   HasRangeKey: !Not
     - !Equals
       - !Ref RangeKeyName
+      - ''
+  HasTTLAttribute: !Not
+    - !Equals
+      - !Ref TTLAttributeName
       - ''
 
 Resources:
@@ -56,6 +64,11 @@ Resources:
           - AttributeName: !Ref RangeKeyName
             KeyType: RANGE
           - !Ref AWS::NoValue
+      TimeToLiveSpecification: !If
+        - HasTTLAttribute
+        - AttributeName: !Ref TTLAttributeName
+          Enabled: true
+        - !Ref AWS::NoValue
       BillingMode: PAY_PER_REQUEST
 
 Outputs:
