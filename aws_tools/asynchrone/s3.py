@@ -15,7 +15,7 @@ class S3Exception(Exception):
     pass
 
 
-async def create_bucket_async(bucket_name: str, region: str | None=None):
+async def create_bucket_async(bucket_name: str, region: str | None = None):
     """
     Create a bucket
     """
@@ -304,8 +304,3 @@ async def generate_download_url_async(bucket_name: str, key: str, expiration: in
             Params={'Bucket': bucket_name, 'Key': key},
             ExpiresIn=expiration
         )
-
-
-if __name__ == "__main__":
-    from aws_tools._async_tools import _generate_sync_module
-    _generate_sync_module(__name__)

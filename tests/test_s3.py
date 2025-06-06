@@ -1,7 +1,7 @@
 import unittest
 import pathlib
 from uuid import uuid4
-from aws_tools.s3 import S3Exception, create_bucket, delete_bucket, bucket_exists, object_exists, get_object_bytes_size, list_objects, upload_files, download_files, upload_data, download_data, delete_objects, copy_object, delete_object, move_object, initiate_multipart_upload, upload_part, complete_multipart_upload, abort_multipart_upload, generate_download_url
+from aws_tools.synchrone.s3 import S3Exception, create_bucket, delete_bucket, bucket_exists, object_exists, get_object_bytes_size, list_objects, upload_files, download_files, upload_data, download_data, delete_objects, copy_object, delete_object, move_object, initiate_multipart_upload, upload_part, complete_multipart_upload, abort_multipart_upload, generate_download_url
 from aws_tools._check_fail_context import check_fail
 
 

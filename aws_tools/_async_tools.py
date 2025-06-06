@@ -1,8 +1,8 @@
-import sys
 import pathlib
 import inspect
 import asyncio
 import threading
+from types import ModuleType
 from typing import Awaitable, TypeVar, Callable, Any, AsyncIterator, Iterator
 
 
@@ -86,20 +86,16 @@ def _generate_sync_wrapper_code(async_func: Callable[[Any, Any], Awaitable[T]]) 
     return f"def {func_name}({param_str}){return_type_str}:\n{doc}    {code}"
 
 
-def _generate_sync_module(module_name: str) -> str:
+def _generate_sync_module(module: ModuleType) -> str:
     """
     generate a sync module alongside
     """
-    module = sys.modules[module_name]
-    original_path = pathlib.Path(module.__file__)
-    assert "_async" in original_path.stem
-    path = original_path.with_stem(original_path.stem.replace("_async", ""))
-    module_path = f"{module.__package__}.{original_path.stem}"
-    with open(path, "w") as f:
-        f.write(f"\"\"\"\nThis module was automatically generated from {module_path}\n\"\"\"\n")
-        f.write(f"from {__name__} import _run_async, _async_iter_to_sync\n")
-        f.write(f"from {module_path} import {', '.join(name for name, obj in vars(module).items() if not name.startswith("_"))}\n")
-        for filter in (inspect.isasyncgenfunction, inspect.iscoroutinefunction):
-            for name, obj in inspect.getmembers(module, filter):
-                if not name.startswith("_"):
-                    f.write(f"\n\n{_generate_sync_wrapper_code(obj)}\n\n")
+    code = ""
+    code += f"\"\"\"\nThis module was automatically generated from {module.__name__}\n\"\"\"\n"
+    code += f"from {__name__} import _run_async, _async_iter_to_sync\n"
+    code += f"from {module.__name__} import {', '.join(name for name, obj in vars(module).items() if not name.startswith("_"))}\n"
+    for filter in (inspect.isasyncgenfunction, inspect.iscoroutinefunction):
+        for name, obj in inspect.getmembers(module, filter):
+            if not name.startswith("_"):
+                code += f"\n\n{_generate_sync_wrapper_code(obj)}\n\n"
+    return code

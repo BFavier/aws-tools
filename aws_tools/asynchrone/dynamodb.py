@@ -4,6 +4,7 @@ import aioboto3
 from operator import __and__
 from typing import Type, Literal, Iterable, AsyncIterable
 from decimal import Decimal
+from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from boto3.dynamodb.conditions import ConditionBase, Key, Attr
 from botocore.exceptions import ClientError
 from aws_tools._async_tools import _run_async
@@ -185,7 +186,7 @@ async def create_table_async(
         table_name: str,
         partition_names: dict[Literal["HASH", "RANGE"], str],
         data_types: dict[str, Literal["S", "N", "B"]],
-        blocking: bool=True
+        ttl_attribute: str | None = None,
     ):
     """
     Creates a table, raise an error if it already exists.
@@ -213,13 +214,24 @@ async def create_table_async(
                 BillingMode='PAY_PER_REQUEST'
             )
             # Wait until the table exists before continuing
-            if blocking:
-                await table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
+            await table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
         except ClientError as e:
             if e.response["Error"]["Code"] == "ResourceInUseException":
                 raise DynamoDBException(f"The table '{table_name}' already exists")
             else:
                 raise
+        if ttl_attribute:
+            try:
+                await dynamodb.update_time_to_live(
+                    TableName=table_name,
+                    TimeToLiveSpecification={
+                        "Enabled": True,
+                        "AttributeName": ttl_attribute
+                    }
+                )
+                print(f"TTL enabled on '{table_name}' using attribute '{ttl_attribute}'")
+            except ClientError as e:
+                print(f"Failed to enable TTL: {e}")
 
 
 async def delete_table_async(table_name: str, blocking: bool=True):
@@ -304,6 +316,26 @@ async def put_item_async(table_name: str, item: dict, overwrite: bool=False, ret
             else:
                 raise
         return _recursive_convert(response.get("Attributes"), to_decimal=False)
+
+
+async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict]) -> list[dict]:
+    """
+    Get several item at once. Can't get more than 100 items in one call
+    """
+    serializer = TypeSerializer()
+    deserializer = TypeDeserializer()
+    async with session.client("dynamodb") as dynamodb:
+        desc = await dynamodb.describe_table(TableName=table_name)
+        table_keys = [k["AttributeName"] for k in desc["Table"]["KeySchema"]]
+        all_items = []
+        unprocessed_keys = [{v: serializer.serialize(key_or_item[v]) for v in table_keys} for key_or_item in keys_or_items]
+        while unprocessed_keys:
+            response = await dynamodb.batch_get_item(
+                RequestItems={table_name: {"Keys": unprocessed_keys}}
+            )
+            all_items.extend([{k: deserializer.deserialize(v) for k, v in item.items()} for item in response["Responses"].get(table_name, [])])
+            unprocessed_keys = response.get("UnprocessedKeys", {}).get(table_name, {}).get("Keys", [])
+        return _recursive_convert(all_items, to_decimal=False)
 
 
 async def batch_put_items_async(table_name: str, items: Iterable[dict]):
@@ -711,8 +743,3 @@ async def get_item_fields_async(
         return None
     fields = {f: _extract_item_field_value(item, f) for f in fields if _field_exists(item, f)}
     return _recursive_convert(fields, to_decimal=False)
-
-
-if __name__ == "__main__":
-    from aws_tools._async_tools import _generate_sync_module
-    _generate_sync_module(__name__)

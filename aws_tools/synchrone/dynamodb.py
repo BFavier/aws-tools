@@ -1,8 +1,8 @@
 """
-This module was automatically generated from aws_tools.dynamodb_async
+This module was automatically generated from aws_tools.asynchrone.dynamodb
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync
-from aws_tools.dynamodb_async import typing, boto3, aioboto3, Type, Literal, Iterable, AsyncIterable, Decimal, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
+from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Literal, Iterable, AsyncIterable, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
 
 
 def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000) -> AsyncIterable:
@@ -29,6 +29,14 @@ def batch_delete_items(table_name: str, keys_or_items: Iterable[dict]):
 
 
 
+def batch_get_items(table_name: str, keys_or_items: Iterable[dict]) -> list:
+    """
+    Get several item at once. Can't get more than 100 items in one call
+    """
+    return _run_async(batch_get_items_async(table_name=table_name, keys_or_items=keys_or_items))
+
+
+
 def batch_put_items(table_name: str, items: Iterable[dict]):
     """
     Create items in batch, overwriting if they already exist.
@@ -37,7 +45,7 @@ def batch_put_items(table_name: str, items: Iterable[dict]):
 
 
 
-def create_table(table_name: str, partition_names: dict[typing.Literal['HASH', 'RANGE'], str], data_types: dict[str, typing.Literal['S', 'N', 'B']], blocking: bool = True):
+def create_table(table_name: str, partition_names: dict[typing.Literal['HASH', 'RANGE'], str], data_types: dict[str, typing.Literal['S', 'N', 'B']], ttl_attribute: str | None = None):
     """
     Creates a table, raise an error if it already exists.
     
@@ -45,7 +53,7 @@ def create_table(table_name: str, partition_names: dict[typing.Literal['HASH', '
     -------
     >>> table = create_table("test-table")
     """
-    return _run_async(create_table_async(table_name=table_name, partition_names=partition_names, data_types=data_types, blocking=blocking))
+    return _run_async(create_table_async(table_name=table_name, partition_names=partition_names, data_types=data_types, ttl_attribute=ttl_attribute))
 
 
 

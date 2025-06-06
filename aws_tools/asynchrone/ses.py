@@ -5,29 +5,29 @@ https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-conten
 You can find some examples here:
 https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-examples.html
 """
-import boto3
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal, Union
+from aiobotocore.session import get_session
 
 
-ses = boto3.client("ses")
+session = get_session()
 
 
-def send_email(sender_email: str, recipient_emails: list[str], subject: str, body: str):
+async def send_email_async(sender_email: str, recipient_emails: list[str], subject: str, body: str):
     """
     Send an email to the given recipients
     """
-    ses.send_email(
-        Source=sender_email,
-        Destination={
-            'ToAddresses': recipient_emails,
-        },
-        Message={
-            'Subject': {'Data': subject},
-            'Body': {'Text': {'Data': body},}
-        }
-    )
-
+    async with session.create_client("ses") as ses:
+        await ses.send_email(
+            Source=sender_email,
+            Destination={
+                'ToAddresses': recipient_emails,
+            },
+            Message={
+                'Subject': {'Data': subject},
+                'Body': {'Text': {'Data': body},}
+            }
+        )
 
 
 class _SESEvent(BaseModel):

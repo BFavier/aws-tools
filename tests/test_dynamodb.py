@@ -1,10 +1,10 @@
 import unittest
 from uuid import uuid4
 from decimal import Decimal
-from aws_tools.dynamodb import list_tables, get_table_keys, table_exists, create_table, delete_table
-from aws_tools.dynamodb import item_exists, get_item, put_item, batch_put_items, delete_item, batch_delete_items, update_item, get_item_fields
-from aws_tools.dynamodb import scan_items, query_items, scan_all_items, query_all_items, Attr, Decimal
-from aws_tools.dynamodb import DynamoDBException
+from aws_tools.synchrone.dynamodb import list_tables, get_table_keys, table_exists, create_table, delete_table
+from aws_tools.synchrone.dynamodb import item_exists, get_item, batch_get_items, put_item, batch_put_items, delete_item, batch_delete_items, update_item, get_item_fields
+from aws_tools.synchrone.dynamodb import scan_items, query_items, scan_all_items, query_all_items, Attr, Decimal
+from aws_tools.synchrone.dynamodb import DynamoDBException
 from aws_tools._check_fail_context import check_fail
 
 
@@ -88,6 +88,7 @@ class DynamoDBTest(unittest.TestCase):
         assert item_exists(self.table_name, self.item_id)
         batch_put_items(self.table_name, [self.another_item])
         assert item_exists(self.table_name, self.another_id)
+        assert batch_get_items(self.table_name, [self.another_item]) == [self.another_item]
         # check getting item by id or full item
         assert get_item(self.table_name, self.item_id) == self.item
         assert get_item(self.table_name, self.item) == self.item
