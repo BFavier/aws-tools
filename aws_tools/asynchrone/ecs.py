@@ -13,7 +13,8 @@ async def run_fargate_task_async(
         vCPU: Literal["0.25", "0.5", 1, 2, 4, 8, 16],
         memoryGB_per_vCPU: int,
         disk_space: int=20,
-        environment_variables: dict = {}):
+        environment_variables: dict = {},
+        fargate_platform_version: str = "1.4.0"):
     """
     run a standalone task on an ECS cluster
     """
@@ -22,9 +23,9 @@ async def run_fargate_task_async(
     async with session.create_client("ecs") as ecs:
         return await ecs.run_task(
             cluster=cluster_name,
-            taskDefinition='FlexibleTaskDefinition',
-            launchType='FARGATE',
-            platformVersion='1.4.0',
+            taskDefinition="FlexibleTaskDefinition",
+            launchType="FARGATE",
+            platformVersion=fargate_platform_version,
             networkConfiguration={
                 'awsvpcConfiguration':
                 {
