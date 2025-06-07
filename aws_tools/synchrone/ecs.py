@@ -1,53 +1,13 @@
-import boto3
-from typing import Literal
+"""
+This module was automatically generated from aws_tools.asynchrone.ecs
+"""
+from aws_tools._async_tools import _run_async, _async_iter_to_sync
+from aws_tools.asynchrone.ecs import get_session, Literal, session, run_fargate_task_async
 
-ecs = boto3.client('ecs')
 
-
-def run_fargate_task(
-        cluster_name: str,
-        docker_image_arn: str,
-        task_name: str,
-        subnets_arn : list[str],
-        security_group_arn: str,
-        vCPU: Literal["0.25", "0.5", 1, 2, 4, 8, 16],
-        memoryGB_per_vCPU: int,
-        disk_space: int=20,
-        environment_variables: dict = {}):
+def run_fargate_task(cluster_name: str, docker_image_arn: str, task_name: str, subnets_arn: list[str], security_group_arn: str, vCPU: Literal['0.25', '0.5', 1, 2, 4, 8, 16], memoryGB_per_vCPU: int, disk_space: int = 20, environment_variables: dict = {}):
     """
     run a standalone task on an ECS cluster
     """
-    assert 2 <= memoryGB_per_vCPU <= 8
-    assert 20 <= disk_space <= 200
-    return ecs.run_task(
-        cluster=cluster_name,
-        taskDefinition='FlexibleTaskDefinition',
-        launchType='FARGATE',
-        platformVersion='1.4.0',
-        networkConfiguration={
-            'awsvpcConfiguration':
-            {
-                'subnets': subnets_arn,
-                'securityGroups': [security_group_arn],
-                'assignPublicIp': 'ENABLED'
-            }
-        },
-        overrides={
-            'containerOverrides':
-            [
-                {
-                    'name': task_name,
-                    'image': docker_image_arn,
-                    'cpu': int(float(vCPU) * 1024),
-                    'memory': int(float(vCPU) * memoryGB_per_vCPU * 1024),
-                    'ephemeralStorage': {'sizeInGiB': disk_space},
-                    'environment': [{"name": k, "value": v} for k, v in environment_variables]
-                }
-            ]
-        }
-    )
+    return _run_async(run_fargate_task_async(cluster_name=cluster_name, docker_image_arn=docker_image_arn, task_name=task_name, subnets_arn=subnets_arn, security_group_arn=security_group_arn, vCPU=vCPU, memoryGB_per_vCPU=memoryGB_per_vCPU, disk_space=disk_space, environment_variables=environment_variables))
 
-
-if __name__ == "__main__":
-    import IPython
-    IPython.embed()
