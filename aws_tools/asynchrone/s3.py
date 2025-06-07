@@ -1,6 +1,3 @@
-import tracemalloc
-tracemalloc.start()
-
 import os
 import pathlib
 import aioboto3

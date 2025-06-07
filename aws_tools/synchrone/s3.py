@@ -2,7 +2,7 @@
 This module was automatically generated from aws_tools.asynchrone.s3
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync
-from aws_tools.asynchrone.s3 import tracemalloc, os, pathlib, aioboto3, Iterator, Callable, Optional, AsyncIterator, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async
+from aws_tools.asynchrone.s3 import os, pathlib, aioboto3, Iterator, Callable, Optional, AsyncIterator, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async
 
 
 def list_objects(bucket_name: str, prefix: str | pathlib.Path = '') -> AsyncIterator:

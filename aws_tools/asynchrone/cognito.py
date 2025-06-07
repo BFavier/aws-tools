@@ -1,4 +1,3 @@
-import boto3
 from aiobotocore.session import get_session
 from botocore.exceptions import ClientError
 from typing import Literal
