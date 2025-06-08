@@ -19,7 +19,7 @@ async def list_stacks_async() -> list[str]:
             if next_token is None:
                 break
             else:
-                results = cloud_formation.list_stacks(NextToken=next_token)
+                results = await cloud_formation.list_stacks(NextToken=next_token)
         return stack_names
 
 
