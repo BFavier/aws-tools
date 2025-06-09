@@ -12,8 +12,8 @@ def list_objects(bucket_name: str, prefix: str | pathlib.Path = '') -> AsyncIter
     return _async_iter_to_sync(list_objects_async(bucket_name=bucket_name, prefix=prefix))
 
 
-def abort_multipart_upload(bucket_name: str, key: str, upload_id: str):
-    return _run_async(abort_multipart_upload_async(bucket_name=bucket_name, key=key, upload_id=upload_id))
+def abort_multipart_upload(bucket_name: str, key: str, multipart_upload_id: str):
+    return _run_async(abort_multipart_upload_async(bucket_name=bucket_name, key=key, multipart_upload_id=multipart_upload_id))
 
 
 def bucket_exists(bucket_name: str) -> bool:
@@ -23,8 +23,8 @@ def bucket_exists(bucket_name: str) -> bool:
     return _run_async(bucket_exists_async(bucket_name=bucket_name))
 
 
-def complete_multipart_upload(bucket_name: str, key: str, upload_id: str, part_tags: list[str]):
-    return _run_async(complete_multipart_upload_async(bucket_name=bucket_name, key=key, upload_id=upload_id, part_tags=part_tags))
+def complete_multipart_upload(bucket_name: str, key: str, multipart_upload_id: str, part_tags: list[str]):
+    return _run_async(complete_multipart_upload_async(bucket_name=bucket_name, key=key, multipart_upload_id=multipart_upload_id, part_tags=part_tags))
 
 
 def copy_object(source_bucket: str, source_key: str, dest_bucket: str, dest_key: str):
@@ -122,5 +122,5 @@ def upload_files(files_path: str | pathlib.Path, bucket_name: str, prefix: str |
     return _run_async(upload_files_async(files_path=files_path, bucket_name=bucket_name, prefix=prefix, overwrite=overwrite, callback=callback))
 
 
-def upload_part(bucket_name: str, key: str, upload_id: str, part_number: int, chunk: bytes) -> str:
-    return _run_async(upload_part_async(bucket_name=bucket_name, key=key, upload_id=upload_id, part_number=part_number, chunk=chunk))
+def upload_part(bucket_name: str, key: str, multipart_upload_id: str, part_number: int, chunk: bytes) -> str:
+    return _run_async(upload_part_async(bucket_name=bucket_name, key=key, multipart_upload_id=multipart_upload_id, part_number=part_number, chunk=chunk))

@@ -258,36 +258,36 @@ async def initiate_multipart_upload_async(bucket_name: str, key: str, content_ty
         return response['UploadId']
 
 
-async def upload_part_async(bucket_name: str, key: str, upload_id: str, part_number: int, chunk: bytes) -> str:
+async def upload_part_async(bucket_name: str, key: str, multipart_upload_id: str, part_number: int, chunk: bytes) -> str:
     async with session.client("s3") as s3_client:
         response = await s3_client.upload_part(
             Bucket=bucket_name,
             Key=key,
             PartNumber=part_number,
-            UploadId=upload_id,
+            UploadId=multipart_upload_id,
             Body=chunk
         )
         return response["ETag"]
 
 
-async def complete_multipart_upload_async(bucket_name: str, key: str, upload_id: str, part_tags: list[str]):
+async def complete_multipart_upload_async(bucket_name: str, key: str, multipart_upload_id: str, part_tags: list[str]):
     async with session.client("s3") as s3_client:
         await s3_client.complete_multipart_upload(
             Bucket=bucket_name,
             Key=key,
-            UploadId=upload_id,
+            UploadId=multipart_upload_id,
             MultipartUpload={
                 'Parts': [{'ETag': e_tag, 'PartNumber': i} for i, e_tag in enumerate(part_tags, start=1)]
             }
         )
 
 
-async def abort_multipart_upload_async(bucket_name: str, key: str, upload_id: str):
+async def abort_multipart_upload_async(bucket_name: str, key: str, multipart_upload_id: str):
     async with session.client("s3") as s3_client:
         await s3_client.abort_multipart_upload(
             Bucket=bucket_name,
             Key=key,
-            UploadId=upload_id
+            UploadId=multipart_upload_id
         )
 
 
