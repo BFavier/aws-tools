@@ -3,7 +3,7 @@ import inspect
 import asyncio
 import threading
 from types import ModuleType
-from typing import Awaitable, TypeVar, Callable, Any, AsyncIterator, Iterator
+from typing import Awaitable, TypeVar, Callable, Any, AsyncIterable, Iterable
 
 
 T = TypeVar("T")
@@ -23,7 +23,7 @@ def _run_async(coro: Awaitable[T]) -> T:
         return asyncio.run(coro)
 
 
-def _async_iter_to_sync(async_iter: AsyncIterator[T]) -> Iterator[T]:
+def _async_iter_to_sync(async_iter: AsyncIterable[T]) -> Iterable[T]:
     """
     Converts an async iterator into a sync iterator
     """
@@ -64,6 +64,15 @@ def _async_iter_to_sync(async_iter: AsyncIterator[T]) -> Iterator[T]:
     return iterator()
 
 
+async def _sync_iter_to_async(sync_iter: Iterable[T]) -> AsyncIterable[T]:
+    """
+    Converts a synchrone iterable into an sync one
+    """
+    for obj in sync_iter:
+        yield obj
+        await asyncio.sleep(0)
+
+
 def _generate_sync_wrapper_code(async_func: Callable[[Any, Any], Awaitable[T]]) -> str:
     """
     returns a string representation of a synchrone function wrapper around an synchrone function
@@ -77,12 +86,16 @@ def _generate_sync_wrapper_code(async_func: Callable[[Any, Any], Awaitable[T]]) 
         doc = ""
     return_type = sig.return_annotation
     params = list(sig.parameters.values())
-    param_str = ", ".join(str(p) for p in params)
+    param_str = ", ".join(str(p).replace("AsyncIterable", "Iterable") for p in params)
     args_str = ", ".join(f"{p.name}={p.name}" for p in params)
     func_name = async_func.__name__.removesuffix("_async")
     async_name = async_func.__name__
-    return_type_str = f" -> {getattr(return_type, '__name__', repr(return_type))}" if return_type != inspect.Signature.empty else ""
-    code = f"return _run_async({async_name}({args_str}))" if inspect.iscoroutinefunction(async_func) else f"return _async_iter_to_sync({async_name}({args_str}))"
+    return_type_str = f" -> {getattr(return_type, '__name__', repr(return_type))}".replace("AsyncIterable", "Iterable") if return_type != inspect.Signature.empty else ""
+    code = ""
+    for p in params:
+        if "AsyncIterable" in str(p):
+            code += f"{p.name} = _sync_iter_to_async({p.name})\n    "
+    code = f"{code}return _run_async({async_name}({args_str}))" if inspect.iscoroutinefunction(async_func) else f"return _async_iter_to_sync({async_name}({args_str}))"
     return f"def {func_name}({param_str}){return_type_str}:\n{doc}    {code}"
 
 
@@ -92,10 +105,10 @@ def _generate_sync_module(module: ModuleType) -> str:
     """
     code = ""
     code += f"\"\"\"\nThis module was automatically generated from {module.__name__}\n\"\"\"\n"
-    code += f"from {__name__} import _run_async, _async_iter_to_sync\n"
+    code += f"from {__name__} import _run_async, _async_iter_to_sync, _sync_iter_to_async\n"
     code += f"from {module.__name__} import {', '.join(name for name, obj in vars(module).items() if not name.startswith("_"))}\n"
     for filter in (inspect.isasyncgenfunction, inspect.iscoroutinefunction):
         for name, obj in inspect.getmembers(module, filter):
             if not name.startswith("_"):
-                code += f"\n\n{_generate_sync_wrapper_code(obj)}\n\n"
+                code += f"\n\n{_generate_sync_wrapper_code(obj)}\n"
     return code

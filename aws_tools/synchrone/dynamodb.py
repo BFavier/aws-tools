@@ -1,16 +1,15 @@
 """
 This module was automatically generated from aws_tools.asynchrone.dynamodb
 """
-from aws_tools._async_tools import _run_async, _async_iter_to_sync
+from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
 from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Literal, Iterable, AsyncIterable, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
 
 
-def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000) -> AsyncIterable:
+def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000) -> Iterable:
     """
     Iterate over all the results of a query, handling pagination
     """
     return _async_iter_to_sync(query_all_items_async(table_name=table_name, hash_key=hash_key, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size))
-
 
 
 def scan_all_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000):
@@ -20,13 +19,12 @@ def scan_all_items(table_name: str, conditions: boto3.dynamodb.conditions.Condit
     return _async_iter_to_sync(scan_all_items_async(table_name=table_name, conditions=conditions, subset=subset, page_size=page_size))
 
 
-
 def batch_delete_items(table_name: str, keys_or_items: Iterable[dict]):
     """
     Delete the items by batch, there is no verification that they did not exist.
     """
+    keys_or_items = _sync_iter_to_async(keys_or_items)
     return _run_async(batch_delete_items_async(table_name=table_name, keys_or_items=keys_or_items))
-
 
 
 def batch_get_items(table_name: str, keys_or_items: Iterable[dict]) -> list:
@@ -36,13 +34,11 @@ def batch_get_items(table_name: str, keys_or_items: Iterable[dict]) -> list:
     return _run_async(batch_get_items_async(table_name=table_name, keys_or_items=keys_or_items))
 
 
-
 def batch_put_items(table_name: str, items: Iterable[dict]):
     """
     Create items in batch, overwriting if they already exist.
     """
     return _run_async(batch_put_items_async(table_name=table_name, items=items))
-
 
 
 def create_table(table_name: str, partition_names: dict[typing.Literal['HASH', 'RANGE'], str], data_types: dict[str, typing.Literal['S', 'N', 'B']], ttl_attribute: str | None = None):
@@ -54,7 +50,6 @@ def create_table(table_name: str, partition_names: dict[typing.Literal['HASH', '
     >>> table = create_table("test-table")
     """
     return _run_async(create_table_async(table_name=table_name, partition_names=partition_names, data_types=data_types, ttl_attribute=ttl_attribute))
-
 
 
 def delete_item(table_name: str, key_or_item: dict, return_object: bool = False) -> dict | None:
@@ -72,7 +67,6 @@ def delete_item(table_name: str, key_or_item: dict, return_object: bool = False)
     return _run_async(delete_item_async(table_name=table_name, key_or_item=key_or_item, return_object=return_object))
 
 
-
 def delete_table(table_name: str, blocking: bool = True):
     """
     Delete a table, raise an error if it does not exists
@@ -82,7 +76,6 @@ def delete_table(table_name: str, blocking: bool = True):
     >>> table = delete_table("test_table")
     """
     return _run_async(delete_table_async(table_name=table_name, blocking=blocking))
-
 
 
 def get_item(table_name: str, key_or_item: dict) -> dict | None:
@@ -96,7 +89,6 @@ def get_item(table_name: str, key_or_item: dict) -> dict | None:
     {"uuid": "ID0", "field": 10.0}
     """
     return _run_async(get_item_async(table_name=table_name, key_or_item=key_or_item))
-
 
 
 def get_item_fields(table_name: str, key_or_item: dict, fields: set[str | tuple[str | int]]) -> dict | None:
@@ -123,13 +115,11 @@ def get_item_fields(table_name: str, key_or_item: dict, fields: set[str | tuple[
     return _run_async(get_item_fields_async(table_name=table_name, key_or_item=key_or_item, fields=fields))
 
 
-
 def get_table_keys(table_name: str) -> dict:
     """
     Get the {type: name} of the table keys
     """
     return _run_async(get_table_keys_async(table_name=table_name))
-
 
 
 def item_exists(table_name: str, key_or_item: dict) -> bool:
@@ -140,13 +130,11 @@ def item_exists(table_name: str, key_or_item: dict) -> bool:
     return _run_async(item_exists_async(table_name=table_name, key_or_item=key_or_item))
 
 
-
 def list_tables() -> list:
     """
     list existing tables
     """
     return _run_async(list_tables_async())
-
 
 
 def put_item(table_name: str, item: dict, overwrite: bool = False, return_object: bool = False) -> dict | None:
@@ -161,7 +149,6 @@ def put_item(table_name: str, item: dict, overwrite: bool = False, return_object
     {"uuid": "ID0", "field": 10.0}
     """
     return _run_async(put_item_async(table_name=table_name, item=item, overwrite=overwrite, return_object=return_object))
-
 
 
 def query_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, page_start_token: str | None = None) -> tuple:
@@ -215,7 +202,6 @@ def query_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[
     return _run_async(query_items_async(table_name=table_name, hash_key=hash_key, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size, page_start_token=page_start_token))
 
 
-
 def scan_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, page_start_token: str | None = None) -> tuple:
     """
     Scan all items in the table.
@@ -258,7 +244,6 @@ def scan_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionB
     return _run_async(scan_items_async(table_name=table_name, conditions=conditions, subset=subset, page_size=page_size, page_start_token=page_start_token))
 
 
-
 def table_exists(table_name: str) -> bool:
     """
     Returns True if the table exists and False otherwise
@@ -269,7 +254,6 @@ def table_exists(table_name: str) -> bool:
     False
     """
     return _run_async(table_exists_async(table_name=table_name))
-
 
 
 def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple[str | int], object] = {}, increment_fields: dict[str | tuple[str | int], object] = {}, extend_sets: dict[str | tuple[str | int], object | set] = {}, remove_from_sets: dict[str | tuple[str | int], object | set] = {}, extend_arrays: dict[str | tuple[str | int], list] = {}, delete_fields: Iterable[str | tuple[str | int]] = [], create_item_if_missing: bool = False, return_object: bool = False) -> dict | None:
@@ -308,4 +292,3 @@ def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple
         The updated item if return_object is True, otherwise None.
     """
     return _run_async(update_item_async(table_name=table_name, key_or_item=key_or_item, put_fields=put_fields, increment_fields=increment_fields, extend_sets=extend_sets, remove_from_sets=remove_from_sets, extend_arrays=extend_arrays, delete_fields=delete_fields, create_item_if_missing=create_item_if_missing, return_object=return_object))
-

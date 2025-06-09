@@ -380,7 +380,7 @@ async def delete_item_async(table_name: str, key_or_item: dict, return_object: b
         return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-async def batch_delete_items_async(table_name: str, keys_or_items: Iterable[dict]):
+async def batch_delete_items_async(table_name: str, keys_or_items: AsyncIterable[dict]):
     """
     Delete the items by batch, there is no verification that they did not exist.
     """
@@ -388,7 +388,7 @@ async def batch_delete_items_async(table_name: str, keys_or_items: Iterable[dict
         table = await _get_table_async(dynamodb, table_name)
         table_keys = await _get_table_keys_async(table)
         async with table.batch_writer() as batch:
-            for key in keys_or_items:
+            async for key in keys_or_items:
                 await batch.delete_item(Key={v: key[v] for v in table_keys.values()})
 
 
