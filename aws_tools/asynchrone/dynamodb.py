@@ -18,7 +18,7 @@ class DynamoDBException(Exception):
     pass
 
 
-def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=6) -> object:
+def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=9) -> object:
     """
     replace floats with Decimal objects recursively in a dict
     """
