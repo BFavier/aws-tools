@@ -2,7 +2,7 @@
 This module was automatically generated from aws_tools.asynchrone.dynamodb
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Literal, Iterable, AsyncIterable, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
+from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator, IterableABC, AsyncIterableABC, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
 
 
 def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000) -> Iterable:
@@ -12,14 +12,14 @@ def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tu
     return _async_iter_to_sync(query_all_items_async(table_name=table_name, hash_key=hash_key, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size))
 
 
-def scan_all_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000):
+def scan_all_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000) -> Iterable:
     """
     Return all the items returned by a scan operation, handling pagination
     """
     return _async_iter_to_sync(scan_all_items_async(table_name=table_name, conditions=conditions, subset=subset, page_size=page_size))
 
 
-def batch_delete_items(table_name: str, keys_or_items: Iterable[dict]):
+def batch_delete_items(table_name: str, keys_or_items: Union[Iterable[dict], Iterable[dict]]):
     """
     Delete the items by batch, there is no verification that they did not exist.
     """
@@ -34,10 +34,11 @@ def batch_get_items(table_name: str, keys_or_items: Iterable[dict]) -> list:
     return _run_async(batch_get_items_async(table_name=table_name, keys_or_items=keys_or_items))
 
 
-def batch_put_items(table_name: str, items: Iterable[dict]):
+def batch_put_items(table_name: str, items: Union[Iterable[dict], Iterable[dict]]):
     """
     Create items in batch, overwriting if they already exist.
     """
+    items = _sync_iter_to_async(items)
     return _run_async(batch_put_items_async(table_name=table_name, items=items))
 
 

@@ -2,7 +2,8 @@ import typing
 import boto3
 import aioboto3
 from operator import __and__
-from typing import Type, Literal, Iterable, AsyncIterable
+from typing import Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator
+from collections.abc import Iterable as IterableABC, AsyncIterable as AsyncIterableABC
 from decimal import Decimal
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from boto3.dynamodb.conditions import ConditionBase, Key, Attr
@@ -338,15 +339,21 @@ async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict]) 
         return _recursive_convert(all_items, to_decimal=False)
 
 
-async def batch_put_items_async(table_name: str, items: Iterable[dict]):
+async def batch_put_items_async(table_name: str, items: Iterable[dict] | AsyncIterable[dict]):
     """
     Create items in batch, overwriting if they already exist.
     """
     async with session.resource("dynamodb") as dynamodb:
         table = await _get_table_async(dynamodb, table_name)
         async with table.batch_writer() as batch:
-            for item in items:
-                await batch.put_item(Item=_recursive_convert(item, to_decimal=True))
+            if isinstance(items, AsyncIterableABC):
+                async for item in items:
+                    await batch.put_item(Item=_recursive_convert(item, to_decimal=True))
+            elif isinstance(items, IterableABC):
+                for item in items:
+                    await batch.put_item(Item=_recursive_convert(item, to_decimal=True))
+            else:
+                raise ValueError("Expected iterable for argument 'items'")
 
 
 async def delete_item_async(table_name: str, key_or_item: dict, return_object: bool = False) -> dict | None:
@@ -380,7 +387,7 @@ async def delete_item_async(table_name: str, key_or_item: dict, return_object: b
         return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-async def batch_delete_items_async(table_name: str, keys_or_items: AsyncIterable[dict]):
+async def batch_delete_items_async(table_name: str, keys_or_items: Iterable[dict] | AsyncIterable[dict]):
     """
     Delete the items by batch, there is no verification that they did not exist.
     """
@@ -388,8 +395,15 @@ async def batch_delete_items_async(table_name: str, keys_or_items: AsyncIterable
         table = await _get_table_async(dynamodb, table_name)
         table_keys = await _get_table_keys_async(table)
         async with table.batch_writer() as batch:
-            async for key in keys_or_items:
-                await batch.delete_item(Key={v: key[v] for v in table_keys.values()})
+            if isinstance(keys_or_items, AsyncIterableABC):
+                async for key in keys_or_items:
+                    await batch.delete_item(Key={v: key[v] for v in table_keys.values()})
+            elif isinstance(keys_or_items, IterableABC):
+                for key in keys_or_items:
+                    await batch.delete_item(Key={v: key[v] for v in table_keys.values()})
+            else:
+                raise ValueError("Expected iterable for 'keys_or_items' argument")
+                
 
 
 async def scan_items_async(
@@ -454,7 +468,7 @@ async def scan_all_items_async(
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 1_000,
-        ):
+        ) -> AsyncIterable[dict]:
     """
     Return all the items returned by a scan operation, handling pagination
     """
