@@ -109,6 +109,6 @@ def _generate_sync_module(module: ModuleType) -> str:
     code += f"from {module.__name__} import {', '.join(name for name, obj in vars(module).items() if not name.startswith("_"))}\n"
     for filter in (inspect.isasyncgenfunction, inspect.iscoroutinefunction):
         for name, obj in inspect.getmembers(module, filter):
-            if not name.startswith("_"):
+            if not name.startswith("_") and obj.__code__.co_filename == module.__file__:
                 code += f"\n\n{_generate_sync_wrapper_code(obj)}\n"
     return code
