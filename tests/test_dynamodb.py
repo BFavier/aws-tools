@@ -152,7 +152,7 @@ class DynamoDBTest(unittest.TestCase):
             increment_fields={("array_field", 0, "nested"): 2},
             remove_from_sets={"set_field": {"b", "d"}},
             delete_fields=["field"],
-            return_object=True
+            return_object="NEW"
         ) == {"new_field": 1, "array_field": [{"nested": 12.0}], "set_field": {"a", "c"}}
         update_item(self.table_name, self.item_id, extend_arrays={"array_field": [None]}, extend_sets={"set_field": {"a", "d"}})
         assert get_item_fields(self.table_name, self.item_id, {"array_field", "set_field"}) == {"array_field": [{"nested": 12.0}, None], "set_field": {"a", "c", "d"}}

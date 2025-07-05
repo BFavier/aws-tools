@@ -618,7 +618,7 @@ async def update_item_async(
         extend_arrays: dict[str | tuple[str | int], list] = {},
         delete_fields: Iterable[str | tuple[str | int]] = [],
         create_item_if_missing: bool=False,
-        return_object: bool=False
+        return_object: Literal["OLD", "NEW", None]=None
     ) -> dict | None:
     """
     Update an item fields.
@@ -646,8 +646,8 @@ async def update_item_async(
         If True, create the item if it does not exist.
         Several nested paths can't be created at once.
         If False, raise an error if the item does not exist.
-    return_object : bool
-        If True, the function return the subset of the item containing the updated fields.
+    return_object : "OLD", "NEW" or None
+        If not None, the function return the subset of the item containing the updated fields. (values before update if "OLD", values after update if "NEW")
 
     Returns
     -------
@@ -699,7 +699,7 @@ async def update_item_async(
                 UpdateExpression=expression,
                 ExpressionAttributeValues=attribute_values,
                 ExpressionAttributeNames=attribute_names,
-                ReturnValues="UPDATED_NEW" if return_object else "NONE",  # Return the updated values after setting
+                ReturnValues=f"UPDATED_{return_object}" if return_object else "NONE",  # Return the updated values after setting
                 **kwargs
                 )
         except ClientError as e:

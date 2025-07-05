@@ -257,7 +257,7 @@ def table_exists(table_name: str) -> bool:
     return _run_async(table_exists_async(table_name=table_name))
 
 
-def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple[str | int], object] = {}, increment_fields: dict[str | tuple[str | int], object] = {}, extend_sets: dict[str | tuple[str | int], object | set] = {}, remove_from_sets: dict[str | tuple[str | int], object | set] = {}, extend_arrays: dict[str | tuple[str | int], list] = {}, delete_fields: Iterable[str | tuple[str | int]] = [], create_item_if_missing: bool = False, return_object: bool = False) -> dict | None:
+def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple[str | int], object] = {}, increment_fields: dict[str | tuple[str | int], object] = {}, extend_sets: dict[str | tuple[str | int], object | set] = {}, remove_from_sets: dict[str | tuple[str | int], object | set] = {}, extend_arrays: dict[str | tuple[str | int], list] = {}, delete_fields: Iterable[str | tuple[str | int]] = [], create_item_if_missing: bool = False, return_object: Literal['OLD', 'NEW', None] = None) -> dict | None:
     """
     Update an item fields.
     Only one operation can be done on a single field at a time.
@@ -284,8 +284,8 @@ def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple
         If True, create the item if it does not exist.
         Several nested paths can't be created at once.
         If False, raise an error if the item does not exist.
-    return_object : bool
-        If True, the function return the subset of the item containing the updated fields.
+    return_object : "OLD", "NEW" or None
+        If not None, the function return the subset of the item containing the updated fields. (values before update if "OLD", values after update if "NEW")
     
     Returns
     -------
