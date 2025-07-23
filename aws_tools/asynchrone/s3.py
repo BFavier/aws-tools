@@ -231,6 +231,7 @@ async def delete_object_async(
 ):
     """
     Delete an object from S3.
+    If the object did not exist, do nothing silently.
     """
     async with session.client("s3") as s3:
         await s3.delete_object(Bucket=bucket_name, Key=key)
