@@ -51,6 +51,7 @@ def delete_bucket(bucket_name: str):
 def delete_object(bucket_name: str, key: str):
     """
     Delete an object from S3.
+    If the object did not exist, do nothing silently.
     """
     return _run_async(delete_object_async(bucket_name=bucket_name, key=key))
 

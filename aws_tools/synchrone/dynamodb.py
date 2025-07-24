@@ -5,6 +5,13 @@ from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_t
 from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator, IterableABC, AsyncIterableABC, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
 
 
+def batch_get_items(table_name: str, keys_or_items: Iterable[dict], chunk_size: int = 100) -> Iterable:
+    """
+    Get several items at once.
+    """
+    return _async_iter_to_sync(batch_get_items_async(table_name=table_name, keys_or_items=keys_or_items, chunk_size=chunk_size))
+
+
 def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000) -> Iterable:
     """
     Iterate over all the results of a query, handling pagination
@@ -25,13 +32,6 @@ def batch_delete_items(table_name: str, keys_or_items: Union[Iterable[dict], Ite
     """
     keys_or_items = _sync_iter_to_async(keys_or_items)
     return _run_async(batch_delete_items_async(table_name=table_name, keys_or_items=keys_or_items))
-
-
-def batch_get_items(table_name: str, keys_or_items: Iterable[dict]) -> list:
-    """
-    Get several item at once. Can't get more than 100 items in one call
-    """
-    return _run_async(batch_get_items_async(table_name=table_name, keys_or_items=keys_or_items))
 
 
 def batch_put_items(table_name: str, items: Union[Iterable[dict], Iterable[dict]]):

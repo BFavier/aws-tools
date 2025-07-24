@@ -88,7 +88,7 @@ class DynamoDBTest(unittest.TestCase):
         assert item_exists(self.table_name, self.item_id)
         batch_put_items(self.table_name, [self.another_item])
         assert item_exists(self.table_name, self.another_id)
-        assert batch_get_items(self.table_name, [self.another_item]) == [self.another_item]
+        assert sorted((batch_get_items(self.table_name, [self.item, self.another_item], chunk_size=1)), key=lambda x: repr(sorted(x.items()))) == sorted([self.item, self.another_item], key=lambda x: repr(sorted(x.items())))
         # check getting item by id or full item
         assert get_item(self.table_name, self.item_id) == self.item
         assert get_item(self.table_name, self.item) == self.item

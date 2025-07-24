@@ -29,6 +29,8 @@ def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=9) -> obj
         return {_recursive_convert(i, to_decimal) for i in item}
     elif isinstance(item, dict):
         return {k: _recursive_convert(v, to_decimal) for k, v in item.items() if v != set()}  # remove keys corresponding to empty sets
+    elif item is None or isinstance(item, (str, bool)):
+        return item
     elif isinstance(item, (int, float)) and to_decimal:
         number = str(round(item, 6))
         if "." in number:
@@ -37,8 +39,6 @@ def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=9) -> obj
         return Decimal(number)
     elif isinstance(item, Decimal) and not to_decimal:
         return float(item) if item % 1 != 0 else int(item)
-    elif item is None or type(item) in [str, bool]:
-        return item
     else:
         raise ValueError(f"Unexpected type '{type(item).__name__}' encountered.")
 
@@ -319,24 +319,33 @@ async def put_item_async(table_name: str, item: dict, overwrite: bool=False, ret
         return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict]) -> list[dict]:
+async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100) -> AsyncIterable[dict]:
     """
-    Get several item at once. Can't get more than 100 items in one call
+    Get several items at once.
     """
     serializer = TypeSerializer()
     deserializer = TypeDeserializer()
     async with session.client("dynamodb") as dynamodb:
         desc = await dynamodb.describe_table(TableName=table_name)
         table_keys = [k["AttributeName"] for k in desc["Table"]["KeySchema"]]
-        all_items = []
-        unprocessed_keys = [{v: serializer.serialize(key_or_item[v]) for v in table_keys} for key_or_item in keys_or_items]
-        while unprocessed_keys:
-            response = await dynamodb.batch_get_item(
-                RequestItems={table_name: {"Keys": unprocessed_keys}}
-            )
-            all_items.extend([{k: deserializer.deserialize(v) for k, v in item.items()} for item in response["Responses"].get(table_name, [])])
-            unprocessed_keys = response.get("UnprocessedKeys", {}).get(table_name, {}).get("Keys", [])
-        return _recursive_convert(all_items, to_decimal=False)
+        keys_to_process = (k for k in keys_or_items)
+        unprocessed_keys = []
+        while True:
+            unprocessed_keys.extend([
+                {v: serializer.serialize(key_or_item[v]) for v in table_keys}
+                for _, key_or_item in zip(range(chunk_size - len(unprocessed_keys)), keys_to_process)
+            ])
+            if len(unprocessed_keys) == 0:
+                break
+            all_items = []
+            while len(unprocessed_keys) > 0:
+                response = await dynamodb.batch_get_item(
+                    RequestItems={table_name: {"Keys": unprocessed_keys}}
+                )
+                all_items.extend([{k: deserializer.deserialize(v) for k, v in item.items()} for item in response["Responses"].get(table_name, [])])
+                unprocessed_keys = response.get("UnprocessedKeys", {}).get(table_name, {}).get("Keys", [])
+            for item in all_items:
+                yield _recursive_convert(item, to_decimal=False)
 
 
 async def batch_put_items_async(table_name: str, items: Iterable[dict] | AsyncIterable[dict]):
