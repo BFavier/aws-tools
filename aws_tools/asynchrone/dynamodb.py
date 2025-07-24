@@ -322,30 +322,33 @@ async def put_item_async(table_name: str, item: dict, overwrite: bool=False, ret
 async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100) -> AsyncIterable[dict]:
     """
     Get several items at once.
+    Yield None for items that do not exist.
     """
     serializer = TypeSerializer()
     deserializer = TypeDeserializer()
     async with session.client("dynamodb") as dynamodb:
         desc = await dynamodb.describe_table(TableName=table_name)
         table_keys = [k["AttributeName"] for k in desc["Table"]["KeySchema"]]
-        keys_to_process = (k for k in keys_or_items)
-        unprocessed_keys = []
+        keys_to_process = ({k: item[k] for k in table_keys} for item in keys_or_items)
         while True:
-            unprocessed_keys.extend([
-                {v: serializer.serialize(key_or_item[v]) for v in table_keys}
-                for _, key_or_item in zip(range(chunk_size - len(unprocessed_keys)), keys_to_process)
-            ])
-            if len(unprocessed_keys) == 0:
+            chunk_keys = [key for _, key in zip(range(chunk_size), keys_to_process)]
+            if len(chunk_keys) == 0:
                 break
-            all_items = []
+            processed_items = {}
+            unprocessed_keys = [{k: serializer.serialize(v) for k, v in key.items()} for key in chunk_keys]
             while len(unprocessed_keys) > 0:
                 response = await dynamodb.batch_get_item(
                     RequestItems={table_name: {"Keys": unprocessed_keys}}
                 )
-                all_items.extend([{k: deserializer.deserialize(v) for k, v in item.items()} for item in response["Responses"].get(table_name, [])])
+                processed_items.update(
+                    {
+                        tuple(deserializer.deserialize(item[k]) for k in table_keys) : {kk: deserializer.deserialize(vv) for kk, vv in item.items()}
+                        for item in response["Responses"].get(table_name, [])
+                    }
+                )
                 unprocessed_keys = response.get("UnprocessedKeys", {}).get(table_name, {}).get("Keys", [])
-            for item in all_items:
-                yield _recursive_convert(item, to_decimal=False)
+            for key in chunk_keys:
+                yield _recursive_convert(processed_items.get(tuple(key[k] for k in table_keys)), to_decimal=False)
 
 
 async def batch_put_items_async(table_name: str, items: Iterable[dict] | AsyncIterable[dict]):

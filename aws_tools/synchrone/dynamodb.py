@@ -8,6 +8,7 @@ from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Union, 
 def batch_get_items(table_name: str, keys_or_items: Iterable[dict], chunk_size: int = 100) -> Iterable:
     """
     Get several items at once.
+    Yield None for items that do not exist.
     """
     return _async_iter_to_sync(batch_get_items_async(table_name=table_name, keys_or_items=keys_or_items, chunk_size=chunk_size))
 
