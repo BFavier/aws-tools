@@ -32,7 +32,7 @@ def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=9) -> obj
     elif item is None or isinstance(item, (str, bool)):
         return item
     elif isinstance(item, (int, float)) and to_decimal:
-        number = str(round(item, 6))
+        number = str(round(item, n_decimals))
         if "." in number:
             int_part, decimal_part = number.split(".")
             number = f"{int_part}.{decimal_part[:n_decimals]}"
