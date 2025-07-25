@@ -6,22 +6,24 @@ session = get_session()
 
 async def run_fargate_task_async(
         cluster_name: str,
-        docker_image_arn: str,
+        docker_image_uri: str,
         task_name: str,
-        subnets_arn : list[str],
+        subnet_ids : list[str],
         security_group_arn: str,
         vCPU: Literal["0.25", "0.5", 1, 2, 4, 8, 16],
-        memoryGB_per_vCPU: int,
-        disk_space: int=20,
+        memory_MiB: int,
+        disk_space_GiB: int=20,
         environment_variables: dict = {},
-        fargate_platform_version: str = "1.4.0"):
+        fargate_platform_version: str = "1.4.0"
+    ) -> str:
     """
-    run a standalone task on an ECS cluster
+    Run a standalone task on an ECS cluster.
+    Returns the running task arn.
     """
-    assert 2 <= memoryGB_per_vCPU <= 8
-    assert 20 <= disk_space <= 200
+    assert 2 <= int((memory_MiB / 1024.0) / float(vCPU)) <= 8
+    assert 20 <= disk_space_GiB <= 200
     async with session.create_client("ecs") as ecs:
-        return await ecs.run_task(
+        response = await ecs.run_task(
             cluster=cluster_name,
             taskDefinition="FlexibleTaskDefinition",
             launchType="FARGATE",
@@ -29,7 +31,7 @@ async def run_fargate_task_async(
             networkConfiguration={
                 'awsvpcConfiguration':
                 {
-                    'subnets': subnets_arn,
+                    'subnets': subnet_ids,
                     'securityGroups': [security_group_arn],
                     'assignPublicIp': 'ENABLED'
                 }
@@ -39,12 +41,25 @@ async def run_fargate_task_async(
                 [
                     {
                         'name': task_name,
-                        'image': docker_image_arn,
+                        'image': docker_image_uri,
                         'cpu': int(float(vCPU) * 1024),
-                        'memory': int(float(vCPU) * memoryGB_per_vCPU * 1024),
-                        'ephemeralStorage': {'sizeInGiB': disk_space},
+                        'memory': memory_MiB,
+                        'ephemeralStorage': {'sizeInGiB': disk_space_GiB},
                         'environment': [{"name": k, "value": v} for k, v in environment_variables]
                     }
                 ]
             }
+        )
+    return response["tasks"][0]["taskArn"]
+
+
+async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user"):
+    """
+    Stops a running ECS Fargate task.
+    """
+    async with session.create_client("ecs") as ecs:
+        await ecs.stop_task(
+            cluster=cluster_name,
+            task=task_arn,
+            reason=reason
         )
