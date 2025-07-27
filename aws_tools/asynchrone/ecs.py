@@ -63,3 +63,16 @@ async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str=
             task=task_arn,
             reason=reason
         )
+
+
+async def task_is_running_async(cluster_name: str, task_arn: str) -> bool:
+    """
+    Returns whether a task is running
+    """
+    async with session.client("ecs") as ecs:
+        response = await ecs.describe_tasks(cluster=cluster_name, tasks=[task_arn])
+        tasks = response.get("tasks", [])
+        if not tasks:
+            return False  # Task might have already stopped and expired
+        status = tasks[0]["lastStatus"]
+        return status in ("PROVISIONING", "PENDING", "ACTIVATING", "RUNNING")
