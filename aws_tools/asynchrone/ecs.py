@@ -1,5 +1,5 @@
 from aiobotocore.session import get_session
-from typing import Literal
+from typing import Literal, Iterable, AsyncIterable
 
 session = get_session()
 
@@ -65,14 +65,22 @@ async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str=
         )
 
 
-async def task_is_running_async(cluster_name: str, task_arn: str) -> bool:
+async def tasks_are_running_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[bool]:
     """
-    Returns whether a task is running
+    Returns whether the given tasks are running, by querying aws by batch
     """
+    iterable = (arn for arn in task_arns)
     async with session.client("ecs") as ecs:
-        response = await ecs.describe_tasks(cluster=cluster_name, tasks=[task_arn])
-        tasks = response.get("tasks", [])
-        if not tasks:
-            return False  # Task might have already stopped and expired
-        status = tasks[0]["lastStatus"]
-        return status in ("PROVISIONING", "PENDING", "ACTIVATING", "RUNNING")
+        subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
+        response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns)
+        status = {task["taskArn"]: task["lastStatus"] for task in response["tasks"]}
+        for arn in subset_arns:
+            yield status.get(arn, "MISSING") in ("PROVISIONING", "PENDING", "ACTIVATING", "RUNNING")
+
+
+async def task_is_running(cluster_name, task_arn: str) -> bool:
+    """
+    Returns whether the given taks is running
+    """
+    async for running in tasks_are_running_async(cluster_name, [task_arn]):
+        return running
