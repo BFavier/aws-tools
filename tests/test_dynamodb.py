@@ -138,9 +138,7 @@ class DynamoDBTest(unittest.TestCase):
         """
         test item update api
         """
-        # raise an error on missing item
-        with check_fail(DynamoDBException):
-            update_item(self.table_name, self.item_id, put_fields={"field": 1})
+        assert update_item(self.table_name, self.item_id, put_fields={"field": 1}, return_object="NEW") is None  # update does not happen by default if item does not exists
         assert get_item_fields(self.table_name, self.item_id, {"field"}) is None
         update_item(self.table_name, self.another_id, put_fields={"field": None}, create_item_if_missing=True)
         assert get_item_fields(self.table_name, self.another_id, {"field"}) == {"field": None}

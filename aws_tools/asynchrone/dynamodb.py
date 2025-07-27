@@ -103,14 +103,13 @@ def _field_path_to_expression(*args: tuple[str | tuple[str | int], ...]) -> tupl
     return expressions, attribute_names
 
 
-def _key_exists_condition(table_keys: KeyType, attribute_names: dict[str, str]):
+def _key_exists_condition(table_keys: KeyType):
     """
     Return the condition that the key exist
     """
-    attributes_mapping = {v: k for k, v in attribute_names.items()}
-    condition = f"attribute_exists({attributes_mapping[table_keys['HASH']]})"
+    condition = Attr(table_keys["HASH"]).exists()
     if "RANGE" in table_keys.keys():
-        condition += f" AND attribute_exists({attributes_mapping[table_keys['RANGE']]})"
+        condition = condition & Attr(table_keys["RANGE"]).exists()
     return condition
 
 
@@ -230,9 +229,8 @@ async def create_table_async(
                         "AttributeName": ttl_attribute
                     }
                 )
-                print(f"TTL enabled on '{table_name}' using attribute '{ttl_attribute}'")
             except ClientError as e:
-                print(f"Failed to enable TTL: {e}")
+                raise RuntimeError(f"Failed to enable TTL: {e}")
 
 
 async def delete_table_async(table_name: str, blocking: bool=True):
@@ -383,13 +381,11 @@ async def delete_item_async(table_name: str, key_or_item: dict, return_object: b
     async with session.resource("dynamodb") as dynamodb:
         table = await _get_table_async(dynamodb, table_name)
         table_keys = await _get_table_keys_async(table)
-        _, attribute_names = _field_path_to_expression(*(v for v in table_keys.values()))
         try:
             response = await table.delete_item(
                 Key={k: key_or_item[k] for k in table_keys.values()},
                 ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the removed item
-                ConditionExpression=_key_exists_condition(table_keys, attribute_names),
-                ExpressionAttributeNames=attribute_names,
+                ConditionExpression=_key_exists_condition(table_keys)
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
@@ -628,14 +624,17 @@ async def update_item_async(
         extend_sets: dict[str | tuple[str | int], object | set] = {},
         remove_from_sets: dict[str | tuple[str | int], object | set] = {},
         extend_arrays: dict[str | tuple[str | int], list] = {},
-        delete_fields: Iterable[str | tuple[str | int]] = [],
+        delete_fields: set[str | tuple[str | int]] = set(),
         create_item_if_missing: bool=False,
+        conditions: ConditionBase | None = None,
         return_object: Literal["OLD", "NEW", None]=None
     ) -> dict | None:
     """
     Update an item fields.
     Only one operation can be done on a single field at a time.
-    
+    A set of conditions can optionaly be specified, in which case the update only happen if they are met, and do nothing silently otherwise, and return None if 'return_object' is specified.
+    The 'create_if_missing' is implemented as an additional condition, so if it is False, updating will silently do nothing.
+
     Params
     ------
     table : object
@@ -658,6 +657,8 @@ async def update_item_async(
         If True, create the item if it does not exist.
         Several nested paths can't be created at once.
         If False, raise an error if the item does not exist.
+    conditions : boto3.dynamodb.conditions.ConditionBase or None
+        The conditions to be met
     return_object : "OLD", "NEW" or None
         If not None, the function return the subset of the item containing the updated fields. (values before update if "OLD", values after update if "NEW")
 
@@ -667,16 +668,16 @@ async def update_item_async(
         The updated item if return_object is True, otherwise None.
     """
     async with session.resource("dynamodb") as dynamodb:
-        table = await _get_table_async(dynamodb, table_name)
-        delete_fields = set(delete_fields)
         if sum(len(v) for v in (put_fields, increment_fields, extend_sets, remove_from_sets, extend_arrays, delete_fields)) == 0:
             raise DynamoDBException("At least one update must be made to the item")
+        delete_fields = set(delete_fields)
+        table = await _get_table_async(dynamodb, table_name)
         table_keys = await _get_table_keys_async(table)
         key = {k: key_or_item[k] for k in table_keys.values()}
+        # populating expression and attributes
         expressions, attribute_names = _field_path_to_expression(
             *put_fields.keys(), *extend_arrays.keys(), *increment_fields.keys(),
-            *extend_sets.keys(), *remove_from_sets.keys(), *delete_fields,
-            *((v for v in table_keys.values()) if not create_item_if_missing else [])
+            *extend_sets.keys(), *remove_from_sets.keys(), *delete_fields
         )
         attribute_values = {}
         expression_iterable = iter(expressions)
@@ -704,7 +705,12 @@ async def update_item_async(
         for i, (value, expr) in enumerate(zip(delete_fields, expression_iterable)):
             remove_expressions.append(f"{expr}")
         expression = " ".join(f"{kw} {', '.join(expr)}" for kw, expr in (("SET", set_expressions), ("ADD", add_expressions), ("DELETE", delete_expressions), ("REMOVE", remove_expressions)) if len(expr) > 0)
-        kwargs = (dict() if create_item_if_missing else dict(ConditionExpression=_key_exists_condition(table_keys, attribute_names)))
+        # handling conditions
+        if not create_item_if_missing:
+            key_exists_condition = _key_exists_condition(table_keys)
+            conditions = key_exists_condition if conditions is None else (conditions & key_exists_condition)
+        kwargs = (dict() if conditions is None else dict(ConditionExpression=conditions))
+        # send call to dynamodb
         try:
             response = await table.update_item(
                 Key=key,
@@ -718,7 +724,7 @@ async def update_item_async(
             if e.response["Error"]["Code"] == "ValidationException":
                 raise DynamoDBException(str(e))
             elif e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                raise DynamoDBException(f"The item '{key}' from table '{table.name}' does not exist ({str(e)})")
+                return None
             else:
                 raise
         if not return_object:
