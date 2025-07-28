@@ -8,6 +8,9 @@ Parameters:
     AllowedValues:
       - 'EC2'
       - 'FARGATE'
+  TaskName:
+    Type: String
+    Description: The name of the task
   DockerImage:
     Type: String
     Description: The address of the Docker image to use (busybox, docker.io/library/python:3.12, public.ecr.aws/lambda/python:3.12, 717279735548.dkr.ecr.eu-west-3.amazonaws.com/sleek-simulations/webapp:latest, ...)
@@ -100,7 +103,7 @@ Resources:
     Properties:
       Family: !Sub ${AWS::StackName}-TaskFamily
       ContainerDefinitions:
-        - Name: TaskContainerName
+        - Name: !Ref TaskName
           Image: !Ref DockerImage
           EntryPoint: !If
             - NotHasEntryPoint
@@ -142,5 +145,7 @@ Resources:
 Outputs:
   TaskDefinitionArn:
     Value: !Ref TaskDefinition
+  TaskName:
+    Value: !Ref TaskName
   RunnerRoleArn:
     Value: !GetAtt RunnerRole.Arn

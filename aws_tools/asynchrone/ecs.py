@@ -7,8 +7,7 @@ session = get_session()
 
 async def run_fargate_task_async(
         cluster_name: str,
-        docker_image_uri: str,
-        task_name: str,
+        task_definition: str,
         subnet_ids : list[str],
         security_group_arn: str,
         vCPU: Literal["0.25", "0.5", 1, 2, 4, 8, 16],
@@ -26,7 +25,7 @@ async def run_fargate_task_async(
     async with session.create_client("ecs") as ecs:
         response = await ecs.run_task(
             cluster=cluster_name,
-            taskDefinition="FlexibleTaskDefinition",
+            taskDefinition=task_definition,
             launchType="FARGATE",
             platformVersion=fargate_platform_version,
             networkConfiguration={
@@ -41,14 +40,12 @@ async def run_fargate_task_async(
                 'containerOverrides':
                 [
                     {
-                        'name': task_name,
-                        'image': docker_image_uri,
                         'cpu': int(float(vCPU) * 1024),
                         'memory': memory_MiB,
-                        'ephemeralStorage': {'sizeInGiB': disk_space_GiB},
-                        'environment': [{"name": k, "value": v} for k, v in environment_variables]
+                        'environment': [{"name": k, "value": v} for k, v in environment_variables.items()]
                     }
-                ]
+                ],
+                'ephemeralStorage': {'sizeInGiB': disk_space_GiB},
             }
         )
     return response["tasks"][0]["taskArn"]

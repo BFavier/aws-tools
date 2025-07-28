@@ -258,10 +258,12 @@ def table_exists(table_name: str) -> bool:
     return _run_async(table_exists_async(table_name=table_name))
 
 
-def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple[str | int], object] = {}, increment_fields: dict[str | tuple[str | int], object] = {}, extend_sets: dict[str | tuple[str | int], object | set] = {}, remove_from_sets: dict[str | tuple[str | int], object | set] = {}, extend_arrays: dict[str | tuple[str | int], list] = {}, delete_fields: Iterable[str | tuple[str | int]] = [], create_item_if_missing: bool = False, return_object: Literal['OLD', 'NEW', None] = None) -> dict | None:
+def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple[str | int], object] = {}, increment_fields: dict[str | tuple[str | int], object] = {}, extend_sets: dict[str | tuple[str | int], object | set] = {}, remove_from_sets: dict[str | tuple[str | int], object | set] = {}, extend_arrays: dict[str | tuple[str | int], list] = {}, delete_fields: set[str | tuple[str | int]] = set(), create_item_if_missing: bool = False, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, return_object: Literal['OLD', 'NEW', None] = None) -> dict | None:
     """
     Update an item fields.
     Only one operation can be done on a single field at a time.
+    A set of conditions can optionaly be specified, in which case the update only happen if they are met, and do nothing silently otherwise, and return None if 'return_object' is specified.
+    The 'create_if_missing' is implemented as an additional condition, so if it is False, updating will silently do nothing.
     
     Params
     ------
@@ -285,6 +287,8 @@ def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple
         If True, create the item if it does not exist.
         Several nested paths can't be created at once.
         If False, raise an error if the item does not exist.
+    conditions : boto3.dynamodb.conditions.ConditionBase or None
+        The conditions to be met
     return_object : "OLD", "NEW" or None
         If not None, the function return the subset of the item containing the updated fields. (values before update if "OLD", values after update if "NEW")
     
@@ -293,4 +297,4 @@ def update_item(table_name: str, key_or_item: dict, put_fields: dict[str | tuple
     dict | None
         The updated item if return_object is True, otherwise None.
     """
-    return _run_async(update_item_async(table_name=table_name, key_or_item=key_or_item, put_fields=put_fields, increment_fields=increment_fields, extend_sets=extend_sets, remove_from_sets=remove_from_sets, extend_arrays=extend_arrays, delete_fields=delete_fields, create_item_if_missing=create_item_if_missing, return_object=return_object))
+    return _run_async(update_item_async(table_name=table_name, key_or_item=key_or_item, put_fields=put_fields, increment_fields=increment_fields, extend_sets=extend_sets, remove_from_sets=remove_from_sets, extend_arrays=extend_arrays, delete_fields=delete_fields, create_item_if_missing=create_item_if_missing, conditions=conditions, return_object=return_object))
