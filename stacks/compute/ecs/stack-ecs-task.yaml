@@ -145,7 +145,7 @@ Resources:
 Outputs:
   TaskDefinitionArn:
     Value: !Ref TaskDefinition
-  TaskName:
-    Value: !Ref TaskName
+  TaskFamily:
+    Value: !Ref TaskFamily
   RunnerRoleArn:
     Value: !GetAtt RunnerRole.Arn
