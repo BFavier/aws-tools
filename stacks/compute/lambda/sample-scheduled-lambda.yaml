@@ -46,7 +46,7 @@ Resources:
   CleanupLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/DynamoDBCleanupFunction"
+      LogGroupName: "/aws/lambda/DynamoDBCleanupFunction"
       RetentionInDays: 30
 
   CleanupLambdaFunction:

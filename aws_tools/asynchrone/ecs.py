@@ -1,5 +1,6 @@
 from aiobotocore.session import get_session
 from typing import Literal, Iterable, AsyncIterable
+from botocore.exceptions import ClientError
 
 session = get_session()
 
@@ -53,16 +54,25 @@ async def run_fargate_task_async(
     return response["tasks"][0]["taskArn"]
 
 
-async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user"):
+async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user") -> bool:
     """
     Stops a running ECS Fargate task.
+    If the task did not exist, returns False.
     """
     async with session.create_client("ecs") as ecs:
-        await ecs.stop_task(
-            cluster=cluster_name,
-            task=task_arn,
-            reason=reason
-        )
+        try:
+            await ecs.stop_task(
+                cluster=cluster_name,
+                task=task_arn,
+                reason=reason
+            )
+        except ClientError as e:
+            error = e.response["Error"]
+            if (error["Code"] == "InvalidParameterException") and ("The referenced task was not found" in error["Message"]):
+                return False
+            else:
+                raise
+    return True
 
 
 async def tasks_are_running_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[bool]:
@@ -70,7 +80,7 @@ async def tasks_are_running_async(cluster_name: str, task_arns: Iterable[str], c
     Returns whether the given tasks are running, by querying aws by batch
     """
     iterable = (arn for arn in task_arns)
-    async with session.client("ecs") as ecs:
+    async with session.create_client("ecs") as ecs:
         subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
         response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns)
         status = {task["taskArn"]: task["lastStatus"] for task in response["tasks"]}
