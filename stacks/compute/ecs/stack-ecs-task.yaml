@@ -103,7 +103,7 @@ Resources:
     Properties:
       Family: !Ref TaskFamily
       ContainerDefinitions:
-        - Name: !Ref DockerImage
+        - Name: MyContainer
           Image: !Ref DockerImage
           EntryPoint: !If
             - NotHasEntryPoint
