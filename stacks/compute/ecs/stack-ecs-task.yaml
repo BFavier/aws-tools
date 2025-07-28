@@ -8,7 +8,7 @@ Parameters:
     AllowedValues:
       - 'EC2'
       - 'FARGATE'
-  TaskName:
+  TaskFamily:
     Type: String
     Description: The name of the task
   DockerImage:
@@ -101,9 +101,9 @@ Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Sub ${AWS::StackName}-TaskFamily
+      Family: !Ref TaskFamily
       ContainerDefinitions:
-        - Name: !Ref TaskName
+        - Name: !Ref DockerImage
           Image: !Ref DockerImage
           EntryPoint: !If
             - NotHasEntryPoint
