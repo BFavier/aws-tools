@@ -15,13 +15,26 @@ async def run_fargate_task_async(
         disk_space_GiB: int=20,
         environment_variables: dict = {},
         fargate_platform_version: str = "1.4.0"
-    ) -> str:
+    ) -> dict:
     """
     Run a standalone task on an ECS cluster.
     Returns the running task arn.
     """
     assert 2 <= int((memory_MiB / 1024.0) / float(vCPU)) <= 8
     assert 20 <= disk_space_GiB <= 200
+    overrides = {
+        'containerOverrides':
+        [
+            {
+                'name': "MyContainer",
+                'cpu': int(float(vCPU) * 1024),
+                'memory': memory_MiB,
+                'environment': [{"name": k, "value": v} for k, v in environment_variables.items()]
+            }
+        ],
+    }
+    if disk_space_GiB > 20:
+        overrides["ephemeralStorage"] = {'sizeInGiB': disk_space_GiB}
     async with session.create_client("ecs") as ecs:
         response = await ecs.run_task(
             cluster=cluster_name,
@@ -36,19 +49,9 @@ async def run_fargate_task_async(
                     'assignPublicIp': 'ENABLED'
                 }
             },
-            overrides={
-                'containerOverrides':
-                [
-                    {
-                        'cpu': int(float(vCPU) * 1024),
-                        'memory': memory_MiB,
-                        'environment': [{"name": k, "value": v} for k, v in environment_variables.items()]
-                    }
-                ],
-                'ephemeralStorage': {'sizeInGiB': disk_space_GiB},
-            }
+            overrides=overrides
         )
-    return response["tasks"][0]["taskArn"]
+    return response["tasks"][0]
 
 
 async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user") -> bool:
