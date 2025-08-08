@@ -10,47 +10,47 @@ async def run_fargate_task_async(
         task_definition: str,
         subnet_ids : list[str],
         security_group_arn: str,
-        vCPU: Literal["0.25", "0.5", 1, 2, 4, 8, 16],
-        memory_MiB: int,
-        disk_space_GiB: int=20,
-        environment_variables: dict = {},
-        fargate_platform_version: str = "1.4.0"
+        fargate_platform_version: str = "1.4.0",
+        vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
+        memory_MiB_override: int | None = None,
+        disk_GiB_override: int | None = None,
+        env_overrides: dict | None = None,
     ) -> dict:
     """
     Run a standalone task on an ECS cluster.
     Returns the running task arn.
     """
-    assert 2 <= int((memory_MiB / 1024.0) / float(vCPU)) <= 8
-    assert 20 <= disk_space_GiB <= 200
-    overrides = {
-        'containerOverrides':
-        [
-            {
-                'name': task_definition,
-                'cpu': int(float(vCPU) * 1024),
-                'memory': memory_MiB,
-                'environment': [{"name": k, "value": v} for k, v in environment_variables.items()]
-            }
-        ],
+    assert (disk_GiB_override is None) or (20 <= disk_GiB_override <= 200)
+    container_overrides = {
+        "name": task_definition,
+        "cpu": int(float(vCPU_override) * 1024) if vCPU_override is not None else None,
+        "memory": memory_MiB_override,
+        "environment": [{"name": k, "value": v} for k, v in env_overrides.items()] if env_overrides is not None else None
     }
-    if disk_space_GiB > 20:
-        overrides["ephemeralStorage"] = {'sizeInGiB': disk_space_GiB}
+    container_overrides = {k : v for k, v in container_overrides.items() if v is not None}
+    overrides = {}
+    if disk_GiB_override > 20:
+        overrides["ephemeralStorage"] = {"sizeInGiB": disk_GiB_override}
+    if len(container_overrides.keys()) > 1:
+        overrides["containerOverrides"] = [container_overrides]
+    kwargs = dict(
+        cluster=cluster_name,
+        taskDefinition=task_definition,
+        launchType="FARGATE",
+        platformVersion=fargate_platform_version,
+        networkConfiguration={
+            "awsvpcConfiguration":
+            {
+                "subnets": subnet_ids,
+                "securityGroups": [security_group_arn],
+                "assignPublicIp": "ENABLED"
+            }
+        },
+    )
+    if len(overrides.keys()) > 0:
+        kwargs["overrides"] = overrides=overrides
     async with session.create_client("ecs") as ecs:
-        response = await ecs.run_task(
-            cluster=cluster_name,
-            taskDefinition=task_definition,
-            launchType="FARGATE",
-            platformVersion=fargate_platform_version,
-            networkConfiguration={
-                'awsvpcConfiguration':
-                {
-                    'subnets': subnet_ids,
-                    'securityGroups': [security_group_arn],
-                    'assignPublicIp': 'ENABLED'
-                }
-            },
-            overrides=overrides
-        )
+        response = await ecs.run_task(**kwargs)
     return response["tasks"][0]
 
 
