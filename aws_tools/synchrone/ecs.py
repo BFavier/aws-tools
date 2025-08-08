@@ -2,7 +2,7 @@
 This module was automatically generated from aws_tools.asynchrone.ecs
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.ecs import get_session, Literal, Iterable, AsyncIterable, ClientError, session, run_fargate_task_async, stop_fargate_task_async, get_tasks_descriptions_async, TASK_STATUSES, get_tasks_statuses_async, task_is_running, task_exists, get_task_tags
+from aws_tools.asynchrone.ecs import get_session, Literal, Iterable, AsyncIterable, Optional, ClientError, session, run_fargate_task_async, stop_fargate_task_async, get_tasks_descriptions_async, TASK_STATUSES, get_tasks_statuses_async, task_is_running, task_exists, get_task_tags
 
 
 def get_tasks_descriptions(cluster_name: str, task_arns: Iterable[str], chunk_size: int = 100) -> Iterable:

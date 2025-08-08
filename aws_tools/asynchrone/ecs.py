@@ -1,5 +1,5 @@
 from aiobotocore.session import get_session
-from typing import Literal, Iterable, AsyncIterable
+from typing import Literal, Iterable, AsyncIterable, Optional
 from botocore.exceptions import ClientError
 
 session = get_session()
