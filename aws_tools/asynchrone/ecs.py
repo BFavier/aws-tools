@@ -10,7 +10,7 @@ async def run_fargate_task_async(
         task_definition: str,
         subnet_ids : list[str],
         security_group_arn: str,
-        fargate_platform_version: str = "1.4.0",
+        fargate_platform_version: str = "LATEST",
         vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
         memory_MiB_override: int | None = None,
         disk_GiB_override: int | None = None,
