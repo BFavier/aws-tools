@@ -11,6 +11,7 @@ async def run_fargate_task_async(
         subnet_ids : list[str],
         security_group_arn: str,
         fargate_platform_version: str = "LATEST",
+        tags: dict = {},
         vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
         memory_MiB_override: int | None = None,
         disk_GiB_override: int | None = None,
@@ -46,6 +47,7 @@ async def run_fargate_task_async(
                 "assignPublicIp": "ENABLED"
             }
         },
+        tags=[{"key": k, "value": v} for k, v in tags.items()]
     )
     if len(overrides.keys()) > 0:
         kwargs["overrides"] = overrides=overrides
@@ -75,22 +77,52 @@ async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str=
     return True
 
 
-async def tasks_are_running_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[bool]:
+async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[dict | None]:
     """
-    Returns whether the given tasks are running, by querying aws by batch
+    Returns the description of the given tasks, by querying aws by batch. Yield None for non-existant tasks.
     """
     iterable = (arn for arn in task_arns)
     async with session.create_client("ecs") as ecs:
         subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
         response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns)
-        status = {task["taskArn"]: task["lastStatus"] for task in response["tasks"]}
+        status = {task["taskArn"]: task for task in response["tasks"]}
         for arn in subset_arns:
-            yield status.get(arn, "MISSING") in ("PROVISIONING", "PENDING", "ACTIVATING", "RUNNING")
+            yield status.get(arn)
+
+
+TASK_STATUSES = Literal["PROVISIONING", "PENDING", "RUNNING", "DEPROVISIONING", "STOPPED", "ACTIVATING"]
+
+
+async def get_tasks_statuses_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[TASK_STATUSES | None]:
+    """
+    Returns whether the given tasks are running, by querying aws by batch
+    """
+    async for description in get_tasks_descriptions_async(cluster_name=cluster_name, task_arns=task_arns, chunk_size=chunk_size):
+        if description is None:
+            yield None
+        else:
+            yield description["lastStatus"]
 
 
 async def task_is_running(cluster_name, task_arn: str) -> bool:
     """
     Returns whether the given taks is running
     """
-    async for running in tasks_are_running_async(cluster_name, [task_arn]):
-        return running
+    async for status in get_tasks_statuses_async(cluster_name, [task_arn]):
+        return status in {"PROVISIONING", "PENDING", "ACTIVATING", "RUNNING"}
+
+
+async def task_exists(cluster_name: str, task_arn: str) -> bool:
+    """
+    Returns whether the given task exists
+    """
+    async for status in get_tasks_statuses_async(cluster_name, [task_arn]):
+        return status is not None
+
+
+async def get_task_tags(cluster_name, task_arn: str) -> dict[str, str] | None:
+    """
+    Returns the tags of a task. Returns None if the task does not exists.
+    """
+    async for description in get_tasks_descriptions_async(cluster_name, [task_arn]):
+        return {tag["key"]: tag["value"] for tag in description["tags"]} if description is not None else None
