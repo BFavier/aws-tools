@@ -1,5 +1,5 @@
 import pathlib
-from aws_tools.cloud_formation import get_stack_outputs
+from aws_tools.synchrone.cloud_formation import get_stack_outputs
 
 path = pathlib.Path(__file__).parent
 outputs = get_stack_outputs()

@@ -11,12 +11,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-  "pydantic >= 2.10.5",
-  "requests >= 2.32.3",
+sns = [
   "cryptography >= 43.0.1",
+  "pydantic >= 2.10.5",
 ]
-docs = []
+ses = [
+  "pydantic >= 2.10.5",
+]
 
 [tool.setuptools.packages.find]
 include = ["aws_tools", "aws_tools.*"]
