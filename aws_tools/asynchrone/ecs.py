@@ -84,7 +84,7 @@ async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[st
     iterable = (arn for arn in task_arns)
     async with session.create_client("ecs") as ecs:
         subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
-        response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns)
+        response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns, include=["TAGS"])
         status = {task["taskArn"]: task for task in response["tasks"]}
         for arn in subset_arns:
             yield status.get(arn)
@@ -104,7 +104,7 @@ async def get_tasks_statuses_async(cluster_name: str, task_arns: Iterable[str], 
             yield description["lastStatus"]
 
 
-async def task_is_running(cluster_name, task_arn: str) -> bool:
+async def task_is_running_async(cluster_name: str, task_arn: str) -> bool:
     """
     Returns whether the given taks is running
     """
@@ -112,7 +112,7 @@ async def task_is_running(cluster_name, task_arn: str) -> bool:
         return status in {"PROVISIONING", "PENDING", "ACTIVATING", "RUNNING"}
 
 
-async def task_exists(cluster_name: str, task_arn: str) -> bool:
+async def task_exists_async(cluster_name: str, task_arn: str) -> bool:
     """
     Returns whether the given task exists
     """
@@ -120,9 +120,12 @@ async def task_exists(cluster_name: str, task_arn: str) -> bool:
         return status is not None
 
 
-async def get_task_tags(cluster_name, task_arn: str) -> dict[str, str] | None:
+async def get_task_tags_async(cluster_name: str, task_arn: str) -> dict[str, str] | None:
     """
     Returns the tags of a task. Returns None if the task does not exists.
     """
-    async for description in get_tasks_descriptions_async(cluster_name, [task_arn]):
-        return {tag["key"]: tag["value"] for tag in description["tags"]} if description is not None else None
+    async for description in get_tasks_descriptions_async(cluster_name=cluster_name, task_arns=[task_arn]):
+        if description is None:
+            return None
+        else:
+            return {tag["key"]: tag["value"] for tag in description["tags"]}
