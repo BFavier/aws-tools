@@ -18,10 +18,8 @@ dev = [
 ]
 docs = []
 
-[tool.setuptools]
-packages = [
-  "aws_tools"
-]
+[tool.setuptools.packages.find]
+include = ["aws_tools", "aws_tools.*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "aws_tools.__version__"}
