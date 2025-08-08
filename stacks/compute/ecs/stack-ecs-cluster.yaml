@@ -39,6 +39,10 @@ Parameters:
     Type: String
     Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair.
     Default: ''
+  CidrIp:
+    Type: String
+    Description: The IP and CIDR block authorization filter on ingress rules (excepted for ssh rule)
+    Default: '0.0.0.0/0'
 
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
@@ -82,11 +86,11 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref CidrIp
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref CidrIp
       SecurityGroupEgress:
         - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
