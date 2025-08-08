@@ -255,7 +255,7 @@ async def delete_table_async(table_name: str, blocking: bool=True):
                 raise
 
 
-async def item_exists_async(table_name: str, key_or_item: dict) -> bool:
+async def item_exists_async(table_name: str, key_or_item: dict, consistent_read: bool=True) -> bool:
     """
     Returns True if the item exists and False otherwise.
     Faster and cheaper than a 'get_item' as this only query the partition key.
@@ -264,11 +264,11 @@ async def item_exists_async(table_name: str, key_or_item: dict) -> bool:
         table = await _get_table_async(dynamodb, table_name)
         table_keys = await _get_table_keys_async(table)
         key = {v: key_or_item[v] for v in table_keys.values()}
-        response = await table.get_item(Key=key, ProjectionExpression=",".join(key.keys()))
+        response = await table.get_item(Key=key, ProjectionExpression=",".join(key.keys()), ConsistentRead=consistent_read)
         return "Item" in response
 
 
-async def get_item_async(table_name: str, key_or_item: dict) -> dict | None:
+async def get_item_async(table_name: str, key_or_item: dict, consistent_read: bool=True) -> dict | None:
     """
     Get a full item from it's keys, returns None if the key does not exist.
     If the table has an hash key and a range key, both must be provided in the 'keys' dict.
@@ -282,7 +282,7 @@ async def get_item_async(table_name: str, key_or_item: dict) -> dict | None:
         table = await _get_table_async(dynamodb, table_name)
         table_keys = await _get_table_keys_async(table)
         key = {v: key_or_item[v] for v in table_keys.values()}
-        response = await table.get_item(Key=key)
+        response = await table.get_item(Key=key, ConsistentRead=consistent_read)
         return _recursive_convert(response.get("Item"), to_decimal=False)
 
 
@@ -317,7 +317,7 @@ async def put_item_async(table_name: str, item: dict, overwrite: bool=False, ret
         return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100) -> AsyncIterable[dict]:
+async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100, consistent_read: bool=True) -> AsyncIterable[dict]:
     """
     Get several items at once.
     Yield None for items that do not exist.
@@ -335,9 +335,7 @@ async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], 
             processed_items = {}
             unprocessed_keys = [{k: serializer.serialize(v) for k, v in key.items()} for key in chunk_keys]
             while len(unprocessed_keys) > 0:
-                response = await dynamodb.batch_get_item(
-                    RequestItems={table_name: {"Keys": unprocessed_keys}}
-                )
+                response = await dynamodb.batch_get_item(RequestItems={table_name: {"Keys": unprocessed_keys, "ConsistentRead": consistent_read}})
                 processed_items.update(
                     {
                         tuple(deserializer.deserialize(item[k]) for k in table_keys) : {kk: deserializer.deserialize(vv) for kk, vv in item.items()}
@@ -411,7 +409,6 @@ async def batch_delete_items_async(table_name: str, keys_or_items: Iterable[dict
                     await batch.delete_item(Key={v: key[v] for v in table_keys.values()})
             else:
                 raise ValueError("Expected iterable for 'keys_or_items' argument")
-                
 
 
 async def scan_items_async(
@@ -419,7 +416,8 @@ async def scan_items_async(
         conditions: ConditionBase | None = None,
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
-        page_start_token: str | None = None
+        page_start_token: str | None = None,
+        consistent_read: bool=True,
     ) -> tuple[list[dict], str | None]:
     """
     Scan all items in the table.
@@ -467,7 +465,7 @@ async def scan_items_async(
             **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
             **(dict(Limit=page_size) if page_size is not None else dict())
         }
-        response = await table.scan(**kwargs)
+        response = await table.scan(ConsistentRead=consistent_read, **kwargs)
         return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
 
 
@@ -476,6 +474,7 @@ async def scan_all_items_async(
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 1_000,
+            consistent_read: bool=True,
         ) -> AsyncIterable[dict]:
     """
     Return all the items returned by a scan operation, handling pagination
@@ -484,7 +483,8 @@ async def scan_all_items_async(
         table_name=table_name,
         conditions=conditions,
         subset=subset,
-        page_size=page_size
+        page_size=page_size,
+        consistent_read=consistent_read,
     )
     next_page_token = None
     while True:
@@ -503,7 +503,8 @@ async def query_items_async(
         conditions: ConditionBase | None = None,
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
-        page_start_token: str | None = None
+        page_start_token: str | None = None,
+        consistent_read: bool=True,
     ) -> tuple[list[dict], str | None]:
     """
     Query items that match the hash key and/or the sort key.
@@ -580,6 +581,7 @@ async def query_items_async(
         response = await table.query(
             KeyConditionExpression=key_conditions,
             ScanIndexForward=ascending,
+            ConsistentRead=consistent_read,
             **kwargs
         )
         return ([_recursive_convert(item, to_decimal=False) for item in response.get("Items", [])], response.get("LastEvaluatedKey"))
@@ -592,7 +594,8 @@ async def query_all_items_async(
         ascending: bool=True,
         conditions: ConditionBase | None = None,
         subset: list[str] | None = None,
-        page_size: int | None = 1_000
+        page_size: int | None = 1_000,
+        consistent_read: bool = False,
     ) -> AsyncIterable[dict]:
     """
     Iterate over all the results of a query, handling pagination
@@ -604,7 +607,8 @@ async def query_all_items_async(
         ascending=ascending,
         conditions=conditions,
         subset=subset,
-        page_size=page_size
+        page_size=page_size,
+        consistent_read=consistent_read,
     )
     next_page_token = None
     while True:
@@ -736,7 +740,8 @@ async def update_item_async(
 async def get_item_fields_async(
         table_name: str,
         key_or_item: dict,
-        fields: set[str | tuple[str | int]]
+        fields: set[str | tuple[str | int]],
+        consistent_read: bool=False,
     ) -> dict | None:
     """
     Returns the given fields (or field paths) from the item at given key.
@@ -766,7 +771,8 @@ async def get_item_fields_async(
         response = await table.get_item(
             Key=key,
             ProjectionExpression=", ".join(expressions),
-            ExpressionAttributeNames=attribute_names
+            ExpressionAttributeNames=attribute_names,
+            ConsistentRead=consistent_read,
         )
     if "Item" not in response:
         return None
