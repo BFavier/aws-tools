@@ -255,7 +255,7 @@ async def delete_table_async(table_name: str, blocking: bool=True):
                 raise
 
 
-async def item_exists_async(table_name: str, key_or_item: dict, consistent_read: bool=True) -> bool:
+async def item_exists_async(table_name: str, key_or_item: dict, consistent_read: bool=False) -> bool:
     """
     Returns True if the item exists and False otherwise.
     Faster and cheaper than a 'get_item' as this only query the partition key.
@@ -268,7 +268,7 @@ async def item_exists_async(table_name: str, key_or_item: dict, consistent_read:
         return "Item" in response
 
 
-async def get_item_async(table_name: str, key_or_item: dict, consistent_read: bool=True) -> dict | None:
+async def get_item_async(table_name: str, key_or_item: dict, consistent_read: bool=False) -> dict | None:
     """
     Get a full item from it's keys, returns None if the key does not exist.
     If the table has an hash key and a range key, both must be provided in the 'keys' dict.
@@ -317,7 +317,7 @@ async def put_item_async(table_name: str, item: dict, overwrite: bool=False, ret
         return _recursive_convert(response.get("Attributes"), to_decimal=False)
 
 
-async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100, consistent_read: bool=True) -> AsyncIterable[dict]:
+async def batch_get_items_async(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100, consistent_read: bool=False) -> AsyncIterable[dict]:
     """
     Get several items at once.
     Yield None for items that do not exist.
@@ -417,7 +417,7 @@ async def scan_items_async(
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
         page_start_token: str | None = None,
-        consistent_read: bool=True,
+        consistent_read: bool=False,
     ) -> tuple[list[dict], str | None]:
     """
     Scan all items in the table.
@@ -474,7 +474,7 @@ async def scan_all_items_async(
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 1_000,
-            consistent_read: bool=True,
+            consistent_read: bool=False,
         ) -> AsyncIterable[dict]:
     """
     Return all the items returned by a scan operation, handling pagination
@@ -504,7 +504,7 @@ async def query_items_async(
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
         page_start_token: str | None = None,
-        consistent_read: bool=True,
+        consistent_read: bool=False,
     ) -> tuple[list[dict], str | None]:
     """
     Query items that match the hash key and/or the sort key.
