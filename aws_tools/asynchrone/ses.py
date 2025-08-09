@@ -41,7 +41,6 @@ class _SESEvent(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
-
 class Mail(BaseModel):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-mail-object
@@ -229,5 +228,5 @@ class SentEmailEvent(_SESEvent):
     subscription: SubscriptionEvent | None = None
 
 
-EventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SentEmailEvent]
-assert set(_SESEvent.__subclasses__()) == set(EventTypes.__args__)
+SESEventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SentEmailEvent]
+assert set(_SESEvent.__subclasses__()) == set(SESEventTypes.__args__)

@@ -79,8 +79,8 @@ class SNSUnsubscribeRequest(_SNSEvents):
     SigningCertURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/SimpleNotificationService-f3ecfb7224c7233fe7bb5f59f96de52f.pem"]
 
 
-RequestPayloadTypes = Union[SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest]
-assert set(_SNSEvents.__subclasses__()) == set(RequestPayloadTypes.__args__)
+SNSEventsTypes = Union[SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest]
+assert set(_SNSEvents.__subclasses__()) == set(SNSEventsTypes.__args__)
 
 
 async def send_sms_async(phone_number: str, message: str):
@@ -103,7 +103,7 @@ def _is_valid_cert_url(cert_url: str) -> bool:
             parsed.hostname.endswith(".amazonaws.com"))
 
 
-def _get_signed_string(message: RequestPayloadTypes) -> str:
+def _get_signed_string(message: SNSEventsTypes) -> str:
     """
     Construct the string that was originally signed
     https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message-verify-message-signature.html
@@ -124,7 +124,7 @@ async def _get_signing_certificate_async(cert_url: str) -> Certificate:
     return load_pem_x509_certificate(cert_data, default_backend())
 
 
-async def verify_sns_signature_async(body: RequestPayloadTypes) -> bool:
+async def verify_sns_signature_async(body: SNSEventsTypes) -> bool:
     """
     Verify the signature of an SNS message
     https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html
