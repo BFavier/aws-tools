@@ -2,7 +2,7 @@
 This module was automatically generated from aws_tools.asynchrone.sns
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.sns import aws_tools, base64, aiohttp, get_session, padding, hashes, load_pem_x509_certificate, Certificate, default_backend, urlparse, BaseModel, Literal, Annotated, Union, session, HEADERS, SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest, RequestPayloadTypes, send_sms_async, verify_sns_signature_async
+from aws_tools.asynchrone.sns import aws_tools, base64, aiohttp, get_session, padding, hashes, load_pem_x509_certificate, Certificate, default_backend, urlparse, BaseModel, Literal, Annotated, Union, session, HEADERS, SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest, SNSEventsTypes, send_sms_async, verify_sns_signature_async
 
 
 def send_sms(phone_number: str, message: str):

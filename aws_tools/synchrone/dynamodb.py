@@ -5,7 +5,7 @@ from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_t
 from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator, IterableABC, AsyncIterableABC, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
 
 
-def batch_get_items(table_name: str, keys_or_items: Iterable[dict], chunk_size: int = 100, consistent_read: bool = True) -> Iterable:
+def batch_get_items(table_name: str, keys_or_items: Iterable[dict], chunk_size: int = 100, consistent_read: bool = False) -> Iterable:
     """
     Get several items at once.
     Yield None for items that do not exist.
@@ -20,7 +20,7 @@ def query_all_items(table_name: str, hash_key: object, sort_key_filter: str | tu
     return _async_iter_to_sync(query_all_items_async(table_name=table_name, hash_key=hash_key, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size, consistent_read=consistent_read))
 
 
-def scan_all_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, consistent_read: bool = True) -> Iterable:
+def scan_all_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, consistent_read: bool = False) -> Iterable:
     """
     Return all the items returned by a scan operation, handling pagination
     """
@@ -80,7 +80,7 @@ def delete_table(table_name: str, blocking: bool = True):
     return _run_async(delete_table_async(table_name=table_name, blocking=blocking))
 
 
-def get_item(table_name: str, key_or_item: dict, consistent_read: bool = True) -> dict | None:
+def get_item(table_name: str, key_or_item: dict, consistent_read: bool = False) -> dict | None:
     """
     Get a full item from it's keys, returns None if the key does not exist.
     If the table has an hash key and a range key, both must be provided in the 'keys' dict.
@@ -124,7 +124,7 @@ def get_table_keys(table_name: str) -> dict:
     return _run_async(get_table_keys_async(table_name=table_name))
 
 
-def item_exists(table_name: str, key_or_item: dict, consistent_read: bool = True) -> bool:
+def item_exists(table_name: str, key_or_item: dict, consistent_read: bool = False) -> bool:
     """
     Returns True if the item exists and False otherwise.
     Faster and cheaper than a 'get_item' as this only query the partition key.
@@ -153,7 +153,7 @@ def put_item(table_name: str, item: dict, overwrite: bool = False, return_object
     return _run_async(put_item_async(table_name=table_name, item=item, overwrite=overwrite, return_object=return_object))
 
 
-def query_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, page_start_token: str | None = None, consistent_read: bool = True) -> tuple:
+def query_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[object | None, object | None] = (None, None), ascending: bool = True, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, page_start_token: str | None = None, consistent_read: bool = False) -> tuple:
     """
     Query items that match the hash key and/or the sort key.
     Return items in a paginated way.
@@ -204,7 +204,7 @@ def query_items(table_name: str, hash_key: object, sort_key_filter: str | tuple[
     return _run_async(query_items_async(table_name=table_name, hash_key=hash_key, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size, page_start_token=page_start_token, consistent_read=consistent_read))
 
 
-def scan_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, page_start_token: str | None = None, consistent_read: bool = True) -> tuple:
+def scan_items(table_name: str, conditions: boto3.dynamodb.conditions.ConditionBase | None = None, subset: list[str] | None = None, page_size: int | None = 1000, page_start_token: str | None = None, consistent_read: bool = False) -> tuple:
     """
     Scan all items in the table.
     Return items in a paginated way.
