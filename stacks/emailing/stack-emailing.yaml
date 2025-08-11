@@ -25,11 +25,6 @@ Parameters:
     Default: ""
 
 Resources:
-  EmailsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Ref EmailsBucketName
-      AccessControl: Private
   SESMailReceiptRuleSet:
     Type: AWS::SES::ReceiptRuleSet
     Properties:
@@ -46,14 +41,14 @@ Resources:
         Recipients: !Ref Recipients
         Actions:
           - S3Action:
-              BucketName: !Ref EmailsBucket
+              BucketName: !Ref EmailsBucketName
               ObjectKeyPrefix: !Ref EmailsPrefix
         Enabled: true
         ScanEnabled: true
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref EmailsBucket
+      Bucket: !Ref EmailsBucketName
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -64,7 +59,7 @@ Resources:
             Resource: !Join
               - ''
               - - 'arn:aws:s3:::'
-                - !Ref EmailsBucket
+                - !Ref EmailsBucketName
                 - /*
   DMARCRecord:
     Type: AWS::Route53::RecordSet
@@ -248,7 +243,7 @@ Resources:
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref BounceAndComplaintSNSTopic
-      Protocol: https
+      Protocol: !Select [0, !Split [":", !Ref ComplaintsUrl]]  # https or http depending on the provided url
       Endpoint: !Ref ComplaintsUrl
 
   SESConfigurationSet:
@@ -273,7 +268,3 @@ Resources:
           - SUBSCRIPTION
         SnsDestination:
           TopicARN: !Ref BounceAndComplaintSNSTopic
-
-Outputs:
-  EmailsBucketName:
-    Value: !Ref EmailsBucket
