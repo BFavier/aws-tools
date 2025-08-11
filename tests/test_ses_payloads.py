@@ -5,7 +5,7 @@ from aws_tools.synchrone.ses import SentEmailEvent
 
 
 
-data_path = pathlib.Path(__file__).parent / "data" / "SES_events"
+data_path = pathlib.Path(__file__).parent / "data" / "SES-events"
 
 
 SentEmailEvent.model_config = {"extra": "forbid"}
@@ -21,7 +21,7 @@ class TestSES(unittest.TestCase):
                 kwargs = json.load(h)
             print(file.stem)
             SentEmailEvent(**kwargs)
-        self.assertTrue(len(files) > 0, "No files found in the data path")
+        assert len(files) > 0, "No files found in the data path"
 
 
 if __name__ == "__main__":
