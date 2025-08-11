@@ -1,8 +1,7 @@
 import json
 import pathlib
 import unittest
-from aws_tools.asynchrone.sns import SNSEventsTypes, verify_sns_signature_async
-from aws_tools._async_tools import _run_async
+from aws_tools.synchrone.sns import SNSEventsTypes, verify_sns_signature
 from pydantic import TypeAdapter
 
 
@@ -20,7 +19,7 @@ class TestSNS(unittest.TestCase):
             with open(data_path / file, "r") as h:
                 payload = json.load(h)
             body = TypeAdapter(SNSEventsTypes).validate_python(payload)
-            assert _run_async(verify_sns_signature_async(body))
+            assert verify_sns_signature(body)
         assert len(files) > 0, "No files found in the data path"
 
 
