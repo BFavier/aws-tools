@@ -179,14 +179,20 @@ async def upload_data_async(
         await obj.put(Key=key, Body=data)
 
 
-async def download_data_async(bucket_name: str, key: str | pathlib.Path) -> bytes:
+async def download_data_async(bucket_name: str, key: str | pathlib.Path) -> bytes | None:
     """
     load the data stored in the given bucket file
     """
     if isinstance(key, pathlib.Path):
         key = key.as_posix()
     async with session.resource("s3") as s3_resource:
-        obj = await s3_resource.Object(bucket_name, key)
+        try:
+            obj = await s3_resource.Object(bucket_name, key)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return None
+            else:
+                raise
         response = await obj.get()
         return await response["Body"].read()
 
