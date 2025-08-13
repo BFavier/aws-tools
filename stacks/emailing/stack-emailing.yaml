@@ -4,25 +4,21 @@ Description: Defines some resources so that emails adressed to the registered do
 Parameters:
   EmailsBucketName:
     Type: String
-    Description: 'The name of the S3 bucket to store received emails on (ex: ''my-emails-bucket'')'
+    Description: 'The name of the S3 bucket to store received emails on (ex: "my-emails-bucket")'
   EmailsPrefix:
     Type: String
-    Description: 'The prefix where the emails are written on the S3 bucket (ex: ''received-emails/'')'
-  ComplaintsUrl:
+    Description: 'The prefix where the emails are written on the S3 bucket (ex: "emails/received-emails/")'
+  EventsUrl:
     Type: String
-    Description: 'The route to call when a bounce or complaint is received (ex: ''https://api.domain-name.com/mail-bounce-or-complaint/'')'
+    Description: 'The url to call when a sent-email event is received (ex: "https://api.domain-name.com/mail-bounce-or-complaint")'
   Recipients:
     Type: CommaDelimitedList
-    Description: List of email addresses that can receive emails (adresses with the appropriate domain name 'john.doe@domain-name.com')
+    Description: 'List of email addresses that can receive emails (adresses with the appropriate domain name ex: "john.doe@domain-name.com")'
 
-  EmailEventsLogBucketName:
-    Type: String
-    Description: The name of the bucket to save email events logs in (send, delivered, click, open, ...). Or an empty string not to save logs in s3.
-    Default: ""
-  EmailEventsLogPrefix:
-    Type: String
-    Description: The s3 prefix at which to save the email events logs in.
-    Default: ""
+  EmailEvents:
+    Type: CommaDelimitedList
+    Description: The list of events that should be captured for sent emails
+    Default: "SEND,REJECT,BOUNCE,COMPLAINT,DELIVERY,OPEN,CLICK,SUBSCRIPTION"
 
 Resources:
   SESMailReceiptRuleSet:
@@ -243,8 +239,8 @@ Resources:
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref BounceAndComplaintSNSTopic
-      Protocol: !Select [0, !Split [":", !Ref ComplaintsUrl]]  # https or http depending on the provided url
-      Endpoint: !Ref ComplaintsUrl
+      Protocol: !Select [0, !Split [":", !Ref EventsUrl]]  # https or http depending on the provided url
+      Endpoint: !Ref EventsUrl
 
   SESConfigurationSet:
     Type: AWS::SES::ConfigurationSet
@@ -257,14 +253,6 @@ Resources:
       EventDestination:
         Name: BounceAndComplaintNotifications
         Enabled: true
-        MatchingEventTypes:
-          - SEND
-          - REJECT
-          - BOUNCE
-          - COMPLAINT
-          - DELIVERY
-          - OPEN
-          - CLICK
-          - SUBSCRIPTION
+        MatchingEventTypes: !Ref EmailEvents
         SnsDestination:
           TopicARN: !Ref BounceAndComplaintSNSTopic

@@ -82,3 +82,26 @@ Which you can deploy with
 ```bash
 aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --template-body file://./local-stack.yaml --parameters ParameterKey=StacksBucketName,ParameterValue=${MY_STACK_BUCKET} --parameters ParameterKey=DomainName,ParameterValue=${MY_DOMAIN_NAME} --stack-name test-stack --on-failure DO_NOTHING
 ```
+
+## 3) Identify resources that are not created by a cloudformation stack
+
+To keep your system clean, you can detect AWS resources that do not issue from a cloudformation stack by using the following command:
+
+```python
+import boto3
+
+client = boto3.client("resourcegroupstaggingapi")
+
+paginator = client.get_paginator("get_resources")
+
+orphans = []
+
+for page in paginator.paginate(ResourcesPerPage=50):
+    for res in page["ResourceTagMappingList"]:
+        tags = {t["Key"]: t["Value"] for t in res.get("Tags", [])}
+        if "aws:cloudformation:stack-id" not in tags:
+            orphans.append(res["ResourceARN"])
+
+for arn in orphans:
+    print(arn)
+```
