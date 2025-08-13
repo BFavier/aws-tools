@@ -186,14 +186,14 @@ async def download_data_async(bucket_name: str, key: str | pathlib.Path) -> byte
     if isinstance(key, pathlib.Path):
         key = key.as_posix()
     async with session.resource("s3") as s3_resource:
+        obj = await s3_resource.Object(bucket_name, key)
         try:
-            obj = await s3_resource.Object(bucket_name, key)
+            response = await obj.get()
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchKey":
                 return None
             else:
                 raise
-        response = await obj.get()
         return await response["Body"].read()
 
 
