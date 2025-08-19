@@ -2,7 +2,7 @@ import os
 import pathlib
 import aioboto3
 from urllib.parse import urlparse
-from typing import Iterator, Callable, Optional, AsyncIterator
+from typing import Iterator, Callable, Optional, AsyncIterable
 from botocore.exceptions import ClientError
 
 
@@ -78,19 +78,22 @@ async def object_exists_async(bucket_name: str, key: str|pathlib.Path) -> bool:
     return True
 
 
-async def get_object_bytes_size_async(bucket_name: str, key: str) -> int:
+async def get_object_bytes_size_async(bucket_name: str, key: str) -> int | None:
     """
-    Returns the object size in bytes, or None if it does not exists
+    Return the bytes size of the object at given key, or None if it does not exists
     """
-    async with session.resource("s3") as s3_resource:
+    async with session.client("s3") as s3_client:
         try:
-            obj = await s3_resource.Object(bucket_name, key)
-            return await obj.content_length
+            response = await s3_client.head_object(Bucket=bucket_name, Key=key)
         except ClientError as e:
-            raise S3Exception("Object does not exist")
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return None
+            else:
+                raise
+        return response["ContentLength"]
 
 
-async def list_objects_async(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterator[str]:
+async def list_objects_async(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterable[str]:
     """
     List the objects found in the given prefix of the bucket
     """
@@ -195,6 +198,26 @@ async def download_data_async(bucket_name: str, key: str | pathlib.Path) -> byte
             else:
                 raise
         return await response["Body"].read()
+
+
+async def stream_data_async(bucket_name: str, key: str | pathlib.Path, chunk_size: int = 8192) -> AsyncIterable[bytes]:
+    """
+    Stream the data stored in the given S3 bucket file as async chunks.
+    """
+    if isinstance(key, pathlib.Path):
+        key = key.as_posix()
+    async with session.resource("s3") as s3_resource:
+        obj = await s3_resource.Object(bucket_name, key)
+        try:
+            response = await obj.get()
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return  # yields nothing if file does not exist
+            else:
+                raise
+        body = response["Body"]
+        async for chunk in body.iter_chunks(chunk_size=chunk_size):
+            yield chunk
 
 
 async def delete_objects_async(bucket_name: str, prefix: str | pathlib.Path, callback: Callable | None = None):
