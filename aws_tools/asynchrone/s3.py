@@ -96,6 +96,7 @@ async def get_object_bytes_size_async(bucket_name: str, key: str) -> int | None:
 async def list_objects_async(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterable[str]:
     """
     List the objects found in the given prefix of the bucket
+    Some of the yielded keys will be 0 bytes placeholders for folders
     """
     if isinstance(prefix, pathlib.Path):
         prefix = prefix.as_posix()
