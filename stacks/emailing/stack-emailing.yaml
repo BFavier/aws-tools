@@ -431,10 +431,10 @@ Resources:
                           "Events": ["s3:ObjectCreated:*"],
                           "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": prefix}]}}
                       }
-                      if not any(cfg == new_cfg for cfg in lambda_configs):
+                      if all(cfg["Id"] != new_cfg["Id"] for cfg in lambda_configs):
                           lambda_configs.append(new_cfg)
+                          print(lambda_configs)  # for debug
                       # Update bucket notifications
-                      print(lambda_configs)  # for debug
                       s3.put_bucket_notification_configuration(
                           Bucket=bucket,
                           NotificationConfiguration={"LambdaFunctionConfigurations": lambda_configs}
