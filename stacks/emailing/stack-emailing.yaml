@@ -21,6 +21,7 @@ Parameters:
     Default: "SEND,REJECT,BOUNCE,COMPLAINT,DELIVERY,OPEN,CLICK,SUBSCRIPTION"
 
 Resources:
+  # save received emails in chosen prefix + "all/""
   SESMailReceiptRuleSet:
     Type: AWS::SES::ReceiptRuleSet
     Properties:
@@ -38,7 +39,7 @@ Resources:
         Actions:
           - S3Action:
               BucketName: !Ref EmailsBucketName
-              ObjectKeyPrefix: !Ref EmailsPrefix
+              ObjectKeyPrefix: !Sub "${EmailsPrefix}all/"
         Enabled: true
         ScanEnabled: true
   BucketPolicy:
@@ -57,6 +58,8 @@ Resources:
               - - 'arn:aws:s3:::'
                 - !Ref EmailsBucketName
                 - /*
+
+  # Domain name verification for email sending
   DMARCRecord:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -218,6 +221,7 @@ Resources:
       LogGroupName: /aws/lambda/DomainVerificationLambda
       RetentionInDays: 30
 
+  # define webhook for sent email events
   BounceAndComplaintSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -241,7 +245,6 @@ Resources:
       TopicArn: !Ref BounceAndComplaintSNSTopic
       Protocol: !Select [0, !Split [":", !Ref EventsUrl]]  # https or http depending on the provided url
       Endpoint: !Ref EventsUrl
-
   SESConfigurationSet:
     Type: AWS::SES::ConfigurationSet
     Properties:
@@ -256,3 +259,206 @@ Resources:
         MatchingEventTypes: !Ref EmailEvents
         SnsDestination:
           TopicARN: !Ref BounceAndComplaintSNSTopic
+
+  # ressources to copy the received email in /allinto the recipient folder
+  StoreEmailLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: StoreEmailLambdaLogGroup
+    Properties:
+      FunctionName: StoreEmailLambda
+      Handler: index.lambda_handler
+      Role: !GetAtt StoreEmailLambdaRole.Arn
+      Runtime: python3.12
+      Timeout: 60
+      MemorySize: 1024
+      Environment:
+        Variables:
+          EMAILS_BUCKET: !Ref EmailsBucketName
+          PREFIX_BEFORE_RECIPIENT: !Ref EmailsPrefix
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import email
+          from datetime import datetime, UTC
+
+          s3 = boto3.client("s3")
+
+          def lambda_handler(event, context):
+              for record in event['Records']:
+                  bucket = record['s3']['bucket']['name']
+                  key = record['s3']['object']['key']
+
+                  print(f"Processing s3://{bucket}/{key}")
+
+                  # Fetch the raw email
+                  obj = s3.get_object(Bucket=bucket, Key=key)
+                  raw_email = obj['Body'].read()
+
+                  # Parse the email
+                  msg = email.message_from_bytes(raw_email)
+
+                  # Extract recipient(s) from headers
+                  recipients = msg.get_all("To", [])
+                  if not recipients:
+                      print("No recipients found, skipping.")
+                      continue
+
+                  # Use UTC date for folder structure
+                  now = datetime.now(UTC)
+
+                  for recipient in recipients:
+                      recipient_clean = recipient.strip().lower().replace("<", "").replace(">", "")
+
+                      # Build new S3 key: recipient/yyyy/mm/dd/messageId.eml
+                      message_id = f"{now.isoformat()}-{key.split('/')[-1]}"
+                      new_key = f"{os.environ['PREFIX_BEFORE_RECIPIENT']}{recipient_clean}/{now.year}/{now.month:02}/{now.day:02}/{message_id}.eml"
+
+                      # Copy the object under new key
+                      new_bucket = os.environ["EMAILS_BUCKET"]
+                      s3.put_object(
+                          Bucket=new_bucket,
+                          Key=new_key,
+                          Body=raw_email
+                      )
+                      print(f"Copied to s3://{new_bucket}/{new_key}")
+  StoreEmailLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StoreEmailLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:aws:s3:::${EmailsBucketName}/*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+  StoreEmailLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/StoreEmailLambda
+      RetentionInDays: 30
+  BucketInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StoreEmailLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::${EmailsBucketName}
+
+  # resources to trigger email copy lambda on object creation in bucket
+  S3NotificationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3NotificationLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:PutBucketNotification
+                  - s3:GetBucketNotification
+                Resource: !Sub arn:aws:s3:::${EmailsBucketName}
+              - Effect: Allow
+                Action: lambda:AddPermission
+                Resource: !GetAtt StoreEmailLambda.Arn
+  S3NotificationLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: S3NotificationLambdaLogGroup
+    Properties:
+      Handler: index.handler
+      FunctionName: S3NotificationLambda
+      Role: !GetAtt S3NotificationLambdaRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import cfnresponse
+
+          s3 = boto3.client("s3")
+
+          def handler(event, context):
+              print("Event:", event)
+              try:
+                  props = event["ResourceProperties"]
+                  bucket = props["BucketName"]
+                  function_arn = props["LambdaArn"]
+                  prefix = props["Prefix"]
+
+                  request_type = event["RequestType"]
+
+                  # Load existing notifications
+                  notification_conf = s3.get_bucket_notification_configuration(Bucket=bucket)
+                  lambda_configs = notification_conf.get("LambdaFunctionConfigurations", [])
+
+                  if request_type in ("Create", "Update"):
+                      # Add new configuration if not already present
+                      new_cfg = {
+                          "Id": function_arn,
+                          "LambdaFunctionArn": function_arn,
+                          "Events": ["s3:ObjectCreated:*"],
+                          "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": prefix}]}}
+                      }
+                      if not any(cfg == new_cfg for cfg in lambda_configs):
+                          lambda_configs.append(new_cfg)
+                      # Update bucket notifications
+                      print(lambda_configs)  # for debug
+                      s3.put_bucket_notification_configuration(
+                          Bucket=bucket,
+                          NotificationConfiguration={"LambdaFunctionConfigurations": lambda_configs}
+                      )
+                  elif request_type == "Delete":
+                      # Remove our Lambda configuration
+                      lambda_configs = [cfg for cfg in lambda_configs if cfg.get("LambdaFunctionArn") != function_arn]
+                      s3.put_bucket_notification_configuration(
+                          Bucket=bucket,
+                          NotificationConfiguration={"LambdaFunctionConfigurations": lambda_configs}
+                      )
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  print("Error:", e)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Error": str(e)})
+  S3NotificationLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/S3NotificationLambda
+      RetentionInDays: 30
+  AttachS3Notification:
+    Type: Custom::S3Notification
+    Properties:
+      ServiceToken: !GetAtt S3NotificationLambda.Arn
+      BucketName: !Ref EmailsBucketName
+      LambdaArn: !GetAtt StoreEmailLambda.Arn
+      Prefix: !Sub "${EmailsPrefix}all/"
