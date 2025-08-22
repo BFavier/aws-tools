@@ -2,14 +2,22 @@
 This module was automatically generated from aws_tools.asynchrone.s3
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.s3 import os, pathlib, aioboto3, urlparse, Iterator, Callable, Optional, AsyncIterator, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async, s3_uri_to_bucket_and_key
+from aws_tools.asynchrone.s3 import os, pathlib, aioboto3, urlparse, Iterator, Callable, Optional, AsyncIterable, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, stream_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async, s3_uri_to_bucket_and_key
 
 
-def list_objects(bucket_name: str, prefix: str | pathlib.Path = '') -> AsyncIterator:
+def list_objects(bucket_name: str, prefix: str | pathlib.Path = '') -> Iterable:
     """
     List the objects found in the given prefix of the bucket
+    Some of the yielded keys will be 0 bytes placeholders for folders
     """
     return _async_iter_to_sync(list_objects_async(bucket_name=bucket_name, prefix=prefix))
+
+
+def stream_data(bucket_name: str, key: str | pathlib.Path, chunk_size: int = 8192) -> Iterable:
+    """
+    Stream the data stored in the given S3 bucket file as async chunks.
+    """
+    return _async_iter_to_sync(stream_data_async(bucket_name=bucket_name, key=key, chunk_size=chunk_size))
 
 
 def abort_multipart_upload(bucket_name: str, key: str, multipart_upload_id: str):
@@ -63,7 +71,7 @@ def delete_objects(bucket_name: str, prefix: str | pathlib.Path, callback: Optio
     return _run_async(delete_objects_async(bucket_name=bucket_name, prefix=prefix, callback=callback))
 
 
-def download_data(bucket_name: str, key: str | pathlib.Path) -> bytes:
+def download_data(bucket_name: str, key: str | pathlib.Path) -> bytes | None:
     """
     load the data stored in the given bucket file
     """
@@ -84,9 +92,9 @@ def generate_download_url(bucket_name: str, key: str, expiration: int = 3600) ->
     return _run_async(generate_download_url_async(bucket_name=bucket_name, key=key, expiration=expiration))
 
 
-def get_object_bytes_size(bucket_name: str, key: str) -> int:
+def get_object_bytes_size(bucket_name: str, key: str) -> int | None:
     """
-    Returns the object size in bytes, or None if it does not exists
+    Return the bytes size of the object at given key, or None if it does not exists
     """
     return _run_async(get_object_bytes_size_async(bucket_name=bucket_name, key=key))
 

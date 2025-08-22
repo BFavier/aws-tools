@@ -210,7 +210,7 @@ class SubscriptionEvent(_SESEvent):
     oldTopicPreferences: TopicPreferences
 
 
-class SentEmailEvent(_SESEvent):
+class SESEmailEvent(_SESEvent):
     """
     https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html#event-publishing-retrieving-sns-contents-top-level-json-object
     """
@@ -228,5 +228,5 @@ class SentEmailEvent(_SESEvent):
     subscription: SubscriptionEvent | None = None
 
 
-SESEventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SentEmailEvent]
+SESEventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SESEmailEvent]
 assert set(_SESEvent.__subclasses__()) == set(SESEventTypes.__args__)
