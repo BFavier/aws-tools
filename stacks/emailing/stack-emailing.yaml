@@ -21,7 +21,7 @@ Parameters:
     Default: "SEND,REJECT,BOUNCE,COMPLAINT,DELIVERY,OPEN,CLICK,SUBSCRIPTION"
 
 Resources:
-  # save received emails in chosen prefix + "all/""
+  # save received emails in chosen prefix + "all/"
   SESMailReceiptRuleSet:
     Type: AWS::SES::ReceiptRuleSet
     Properties:
@@ -399,7 +399,7 @@ Resources:
       Handler: index.handler
       FunctionName: S3NotificationLambda
       Role: !GetAtt S3NotificationLambdaRole.Arn
-      Runtime: python3.9
+      Runtime: python3.12
       Timeout: 60
       Code:
         ZipFile: |
@@ -422,6 +422,8 @@ Resources:
                   # Load existing notifications
                   notification_conf = s3.get_bucket_notification_configuration(Bucket=bucket)
                   lambda_configs = notification_conf.get("LambdaFunctionConfigurations", [])
+                  # Remove our Lambda configuration
+                  lambda_configs = [cfg for cfg in lambda_configs if cfg.get("Id") != function_arn]
 
                   if request_type in ("Create", "Update"):
                       # Add new configuration if not already present
@@ -431,17 +433,13 @@ Resources:
                           "Events": ["s3:ObjectCreated:*"],
                           "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": prefix}]}}
                       }
-                      if all(cfg["Id"] != new_cfg["Id"] for cfg in lambda_configs):
-                          lambda_configs.append(new_cfg)
-                          print(lambda_configs)  # for debug
+                      lambda_configs.append(new_cfg)
                       # Update bucket notifications
                       s3.put_bucket_notification_configuration(
                           Bucket=bucket,
                           NotificationConfiguration={"LambdaFunctionConfigurations": lambda_configs}
                       )
                   elif request_type == "Delete":
-                      # Remove our Lambda configuration
-                      lambda_configs = [cfg for cfg in lambda_configs if cfg.get("LambdaFunctionArn") != function_arn]
                       s3.put_bucket_notification_configuration(
                           Bucket=bucket,
                           NotificationConfiguration={"LambdaFunctionConfigurations": lambda_configs}
