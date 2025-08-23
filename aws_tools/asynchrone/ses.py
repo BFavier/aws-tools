@@ -27,10 +27,6 @@ async def send_email_async(sender_email: str, recipient_emails: list[str], subje
                 'Subject': {'Charset': 'UTF-8', 'Data': subject},
                 'Body': {'Html': {'Charset': 'UTF-8', 'Data': body},}
             },
-            ReplyToAddresses=[],
-            ReturnPath='',
-            ReturnPathArn='',
-            SourceArn='',
         )
 
 
