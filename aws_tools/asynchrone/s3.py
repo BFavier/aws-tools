@@ -2,7 +2,7 @@ import os
 import pathlib
 import aioboto3
 from urllib.parse import urlparse
-from typing import Iterator, Callable, Optional, AsyncIterable
+from typing import Iterable, Callable, Optional, AsyncIterable
 from botocore.exceptions import ClientError
 
 
