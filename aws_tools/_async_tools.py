@@ -130,7 +130,7 @@ def _generate_sync_module(module: ModuleType) -> str:
     code = ""
     code += f"\"\"\"\nThis module was automatically generated from {module.__name__}\n\"\"\"\n"
     code += f"from {__name__} import _run_async, _async_iter_to_sync, _sync_iter_to_async\n"
-    code += f"from {module.__name__} import {', '.join(name for name, obj in vars(module).items() if not name.startswith("_"))}\n"
+    code += f"from {module.__name__} import {', '.join(name for name, obj in vars(module).items())}\n"
     for filter in (inspect.isasyncgenfunction, inspect.iscoroutinefunction):
         for name, obj in inspect.getmembers(module, filter):
             if not name.startswith("_") and obj.__code__.co_filename == module.__file__:
