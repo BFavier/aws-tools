@@ -1,3 +1,4 @@
+import re
 import pathlib
 import inspect
 import asyncio
@@ -73,30 +74,53 @@ async def _sync_iter_to_async(sync_iter: Iterable[T]) -> AsyncIterable[T]:
         await asyncio.sleep(0)
 
 
-def _generate_sync_wrapper_code(async_func: Callable[[Any, Any], Awaitable[T]]) -> str:
+def _function_definition_from_source(source: str) -> Iterable[str]:
     """
-    returns a string representation of a synchrone function wrapper around an synchrone function
+    Recursively extract a function definition from source
+    """
+    open_parenthesis: int=0
+    characters = (c for c in source)
+    for c in characters:
+        yield c
+        if c == "(":
+            open_parenthesis += 1
+        elif c == ")":
+            open_parenthesis -= 1
+            if open_parenthesis == 0:
+                break
+    for c in characters:
+        yield c
+        if c == ":":
+            break
+
+
+def _generate_sync_wrapper_code(async_func: Callable[[Any], Awaitable[T]]) -> str:
+    """
+    Returns a string representation of a sync function wrapper
+    around an async function, preserving the original type hints
+    exactly as written in the source file.
     """
     assert inspect.iscoroutinefunction(async_func) or inspect.isasyncgenfunction(async_func)
-    sig = inspect.signature(async_func)
+    # Copy the function definition in format: "async def copy_object_async(obj: FileSystemObjectTypes, parent: FileSystemObjectTypes | None):"
+    source = "".join(_function_definition_from_source(inspect.getsource(async_func)))
+    # Strip "async " from the front
+    signature_line = re.sub(r"^async\s+", "", source)
+    # Replace function name
+    func_name = async_func.__name__.removesuffix("_async")
+    signature_line = signature_line.replace(async_func.__name__, func_name, 1)
+    # Get docstring if present
     doc = inspect.getdoc(async_func)
-    if doc is not None:
+    if (doc is not None) and len(doc.strip()) > 0:
         doc = '    """\n    ' + "\n    ".join(doc.split("\n")) + '\n    """\n'
     else:
         doc = ""
-    return_type = sig.return_annotation
-    params = list(sig.parameters.values())
-    param_str = ", ".join(str(p).replace("AsyncIterable", "Iterable") for p in params)
-    args_str = ", ".join(f"{p.name}={p.name}" for p in params)
-    func_name = async_func.__name__.removesuffix("_async")
-    async_name = async_func.__name__
-    return_type_str = f" -> {getattr(return_type, '__name__', repr(return_type))}".replace("AsyncIterable", "Iterable") if return_type != inspect.Signature.empty else ""
-    code = ""
-    for p in params:
-        if "AsyncIterable" in str(p):
-            code += f"{p.name} = _sync_iter_to_async({p.name})\n    "
-    code = f"{code}return _run_async({async_name}({args_str}))" if inspect.iscoroutinefunction(async_func) else f"return _async_iter_to_sync({async_name}({args_str}))"
-    return f"def {func_name}({param_str}){return_type_str}:\n{doc}    {code}"
+    # Build wrapper body
+    if inspect.iscoroutinefunction(async_func):
+        body = f"return _run_async({async_func.__name__}({', '.join(p.name + '=' + p.name for p in inspect.signature(async_func).parameters.values())}))"
+    else:  # async generator
+        body = f"return _async_iter_to_sync({async_func.__name__}({', '.join(p.name + '=' + p.name for p in inspect.signature(async_func).parameters.values())}))"
+
+    return f"{signature_line}\n{doc}    {body}"
 
 
 def _generate_sync_module(module: ModuleType) -> str:

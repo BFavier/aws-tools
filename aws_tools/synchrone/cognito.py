@@ -81,7 +81,7 @@ def admin_setup_mfa(user_pool: str, user: str, enabled: bool):
     return _run_async(admin_setup_mfa_async(user_pool=user_pool, user=user, enabled=enabled))
 
 
-def admin_sign_up(user_pool: str, user: str, password: str, attributes: dict = {}):
+def admin_sign_up(user_pool: str, user: str, password: str, attributes: dict={}):
     """
     Creates an account without sending email verification.
     This does not send a confirmation email, {"email_verified": "true"} should be part of the attributes.
@@ -128,7 +128,7 @@ def refresh_access_token(pool_client: str, refresh_token: str) -> str:
     return _run_async(refresh_access_token_async(pool_client=pool_client, refresh_token=refresh_token))
 
 
-def send_confirmation_code(access_token: str, medium: Literal['email', 'phone_number']):
+def send_confirmation_code(access_token: str, medium: Literal["email", "phone_number"]):
     """
     send (or resend) a confirmation sms or email to verify that user has access to it
     """
@@ -156,7 +156,7 @@ def validate_mfa(pool_client: str, user: str, session_token: str, mfa_code: str)
     return _run_async(validate_mfa_async(pool_client=pool_client, user=user, session_token=session_token, mfa_code=mfa_code))
 
 
-def verify_confirmation_code(access_token: str, medium: Literal['email', 'phone_number'], code: str):
+def verify_confirmation_code(access_token: str, medium: Literal["email", "phone_number"], code: str):
     """
     validate the email or phone number
     """

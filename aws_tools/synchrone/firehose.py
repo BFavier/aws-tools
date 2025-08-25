@@ -6,7 +6,4 @@ from aws_tools.asynchrone.firehose import json, get_session, session, save_to_fi
 
 
 def save_to_firehose(serialisable: dict, firehose_stream: str):
-    """
-        
-    """
     return _run_async(save_to_firehose_async(serialisable=serialisable, firehose_stream=firehose_stream))

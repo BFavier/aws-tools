@@ -12,7 +12,7 @@ def get_stack_outputs(stack: str | None = None) -> dict:
     return _run_async(get_stack_outputs_async(stack=stack))
 
 
-def list_stacks() -> list:
+def list_stacks() -> list[str]:
     """
     list existing stacks
     """

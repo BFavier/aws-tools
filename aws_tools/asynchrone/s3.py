@@ -71,7 +71,7 @@ async def object_exists_async(bucket_name: str, key: str|pathlib.Path) -> bool:
             obj = await s3_resource.Object(bucket_name, key)
             await obj.load()
         except ClientError as e:
-            if e.response['Error']['Code'] == '404':
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 return False
             else:
                 raise e
@@ -86,7 +86,7 @@ async def get_object_bytes_size_async(bucket_name: str, key: str) -> int | None:
         try:
             response = await s3_client.head_object(Bucket=bucket_name, Key=key)
         except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 return None
             else:
                 raise

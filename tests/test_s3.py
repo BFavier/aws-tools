@@ -65,8 +65,7 @@ class DynamoDBTest(unittest.TestCase):
         # check missing file behaviour
         missing_key = "missing_file.json"
         assert not object_exists(self.bucket_name, missing_key)
-        with check_fail(S3Exception):
-            get_object_bytes_size(self.bucket_name, missing_key)
+        assert get_object_bytes_size(self.bucket_name, missing_key) is None
         # upload files from disk
         upload_files(data_path, self.bucket_name, prefix="")
         assert set(list_objects(self.bucket_name, "")) == {key, "empty_file.json"}
