@@ -103,6 +103,7 @@ def _generate_sync_wrapper_code(async_func: Callable[[Any], Awaitable[T]]) -> st
     assert inspect.iscoroutinefunction(async_func) or inspect.isasyncgenfunction(async_func)
     # Copy the function definition in format: "async def copy_object_async(obj: FileSystemObjectTypes, parent: FileSystemObjectTypes | None):"
     source = "".join(_function_definition_from_source(inspect.getsource(async_func)))
+    source = source.replace("AsyncIterable", "Iterable").replace("AsyncIterator", "Iterator")
     # Strip "async " from the front
     signature_line = re.sub(r"^async\s+", "", source)
     # Replace function name
@@ -130,6 +131,7 @@ def _generate_sync_module(module: ModuleType) -> str:
     code = ""
     code += f"\"\"\"\nThis module was automatically generated from {module.__name__}\n\"\"\"\n"
     code += f"from {__name__} import _run_async, _async_iter_to_sync, _sync_iter_to_async\n"
+    code += f"from typing import Iterable, Iterator\n"
     code += f"from {module.__name__} import {', '.join(name for name, obj in vars(module).items())}\n"
     for filter in (inspect.isasyncgenfunction, inspect.iscoroutinefunction):
         for name, obj in inspect.getmembers(module, filter):
