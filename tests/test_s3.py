@@ -1,7 +1,7 @@
 import unittest
 import pathlib
 from uuid import uuid4
-from aws_tools.synchrone.s3 import S3Exception, create_bucket, delete_bucket, bucket_exists, object_exists, get_object_bytes_size, list_objects, upload_files, download_files, upload_data, download_data, delete_objects, copy_object, delete_object, move_object, initiate_multipart_upload, upload_part, complete_multipart_upload, abort_multipart_upload, generate_download_url
+from aws_tools.synchrone.s3 import S3Exception, create_bucket, delete_bucket, bucket_exists, object_exists, get_object_bytes_size, list_objects_key_and_size, upload_files, download_files, upload_data, download_data, delete_objects, copy_object, delete_object, move_object, initiate_multipart_upload, upload_part, complete_multipart_upload, abort_multipart_upload, generate_download_url
 from aws_tools._check_fail_context import check_fail
 
 
@@ -56,7 +56,7 @@ class DynamoDBTest(unittest.TestCase):
             upload_data(self.data, self.bucket_name, key, overwrite=False)
         upload_data(self.data, self.bucket_name, key, overwrite=True)
         assert object_exists(self.bucket_name, key)
-        assert list(list_objects(self.bucket_name, "")) == [key]
+        assert list(key for key, _ in list_objects_key_and_size(self.bucket_name, "")) == [key]
         assert get_object_bytes_size(self.bucket_name, key) == len(self.data)
         assert download_data(self.bucket_name, key) == self.data
         # delete the file
@@ -68,7 +68,7 @@ class DynamoDBTest(unittest.TestCase):
         assert get_object_bytes_size(self.bucket_name, missing_key) is None
         # upload files from disk
         upload_files(data_path, self.bucket_name, prefix="")
-        assert set(list_objects(self.bucket_name, "")) == {key, "empty_file.json"}
+        assert set(key for key, _ in list_objects_key_and_size(self.bucket_name, "")) == {key, "empty_file.json"}
         assert get_object_bytes_size(self.bucket_name, "empty_file.json") == 0
         # move objects
         move_object(self.bucket_name, key, self.bucket_name, missing_key)
@@ -81,7 +81,7 @@ class DynamoDBTest(unittest.TestCase):
         assert download_data(self.bucket_name, key)
         # delete multiple files
         delete_objects(self.bucket_name, prefix="")
-        assert list(list_objects(self.bucket_name, "")) == []
+        assert list(key for key, _ in list_objects_key_and_size(self.bucket_name, "")) == []
 
 
 if __name__ == "__main__":

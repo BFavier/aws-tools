@@ -498,12 +498,12 @@ async def scan_all_items_async(
 async def query_items_async(
         table_name: str,
         hash_key: object,
+        page_start_token: str | None,
         sort_key_filter: str | tuple[object|None, object|None] = (None, None),
         ascending: bool=True,
         conditions: ConditionBase | None = None,
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
-        page_start_token: str | None = None,
         consistent_read: bool=False,
     ) -> tuple[list[dict], str | None]:
     """

@@ -268,7 +268,7 @@ async def delete_objects_async(bucket_name: str, prefix: str | pathlib.Path, cal
     """
     async with session.resource("s3") as s3_resource:
         bucket = await s3_resource.Bucket(bucket_name)
-        objects = [obj async for obj in list_objects_key_and_size_async(bucket_name, prefix)]
+        objects = [obj async for obj, size in list_objects_key_and_size_async(bucket_name, prefix)]
         delete = [{"Key": key} for i, key in zip(range(1_000), objects)]
         if len(delete) == 0:
             return
