@@ -2,7 +2,8 @@
 This module was automatically generated from aws_tools.asynchrone.ecr
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.ecr import get_session, session, list_repositories_async, list_image_tags_async
+from typing import Iterable, Iterator
+from aws_tools.asynchrone.ecr import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, get_session, session, list_repositories_async, list_image_tags_async
 
 
 def list_image_tags(repository_name: str) -> list[str]:

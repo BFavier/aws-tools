@@ -2,7 +2,8 @@
 This module was automatically generated from aws_tools.asynchrone.cognito
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.cognito import get_session, ClientError, Literal, session, login_async, validate_mfa_async, refresh_access_token_async, logout_async, sign_up_async, confirm_signup_email_async, send_confirmation_code_async, verify_confirmation_code_async, admin_setup_mfa_async, get_user_infos_async, set_attribute_async, admin_get_user_infos_async, admin_set_attributes_async, admin_sign_up_async, admin_resend_account_confirmation_email_async, admin_confirm_status_async, admin_enable_disable_user_async, admin_delete_user_async, admin_resend_confirmation_email_async, admin_forgot_password_async, admin_confirm_forgot_password_async
+from typing import Iterable, Iterator
+from aws_tools.asynchrone.cognito import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, get_session, ClientError, Literal, session, login_async, validate_mfa_async, refresh_access_token_async, logout_async, sign_up_async, confirm_signup_email_async, send_confirmation_code_async, verify_confirmation_code_async, admin_setup_mfa_async, get_user_infos_async, set_attribute_async, admin_get_user_infos_async, admin_set_attributes_async, admin_sign_up_async, admin_resend_account_confirmation_email_async, admin_confirm_status_async, admin_enable_disable_user_async, admin_delete_user_async, admin_resend_confirmation_email_async, admin_forgot_password_async, admin_confirm_forgot_password_async
 
 
 def admin_confirm_forgot_password(pool_client: str, user: str, code: str, password: str):

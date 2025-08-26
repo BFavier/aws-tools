@@ -2,10 +2,11 @@
 This module was automatically generated from aws_tools.asynchrone.dynamodb
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.dynamodb import typing, boto3, aioboto3, Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator, IterableABC, AsyncIterableABC, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, session, KeyType, DynamoDBException, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
+from typing import Iterable, Iterator
+from aws_tools.asynchrone.dynamodb import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, typing, boto3, aioboto3, __and__, Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator, IterableABC, AsyncIterableABC, Decimal, TypeSerializer, TypeDeserializer, ConditionBase, Key, Attr, ClientError, _run_async, session, KeyType, DynamoDBException, _recursive_convert, _extract_item_field_value, _field_exists, _field_path_to_expression, _key_exists_condition, _key_not_exists_condition, _get_table_async, _get_table_keys_async, list_tables_async, table_exists_async, get_table_keys_async, create_table_async, delete_table_async, item_exists_async, get_item_async, put_item_async, batch_get_items_async, batch_put_items_async, delete_item_async, batch_delete_items_async, scan_items_async, scan_all_items_async, query_items_async, query_all_items_async, update_item_async, get_item_fields_async
 
 
-def batch_get_items(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100, consistent_read: bool=False) -> AsyncIterable[dict]:
+def batch_get_items(table_name: str, keys_or_items: Iterable[dict], chunk_size: int=100, consistent_read: bool=False) -> Iterable[dict]:
     """
     Get several items at once.
     Yield None for items that do not exist.
@@ -22,7 +23,7 @@ def query_all_items(
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
         consistent_read: bool = False,
-    ) -> AsyncIterable[dict]:
+    ) -> Iterable[dict]:
     """
     Iterate over all the results of a query, handling pagination
     """
@@ -35,21 +36,21 @@ def scan_all_items(
             subset: list[str] | None = None,
             page_size: int | None = 1_000,
             consistent_read: bool=False,
-        ) -> AsyncIterable[dict]:
+        ) -> Iterable[dict]:
     """
     Return all the items returned by a scan operation, handling pagination
     """
     return _async_iter_to_sync(scan_all_items_async(table_name=table_name, conditions=conditions, subset=subset, page_size=page_size, consistent_read=consistent_read))
 
 
-def batch_delete_items(table_name: str, keys_or_items: Iterable[dict] | AsyncIterable[dict]):
+def batch_delete_items(table_name: str, keys_or_items: Iterable[dict] | Iterable[dict]):
     """
     Delete the items by batch, there is no verification that they did not exist.
     """
     return _run_async(batch_delete_items_async(table_name=table_name, keys_or_items=keys_or_items))
 
 
-def batch_put_items(table_name: str, items: Iterable[dict] | AsyncIterable[dict]):
+def batch_put_items(table_name: str, items: Iterable[dict] | Iterable[dict]):
     """
     Create items in batch, overwriting if they already exist.
     """

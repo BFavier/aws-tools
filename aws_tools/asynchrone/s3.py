@@ -93,17 +93,58 @@ async def get_object_bytes_size_async(bucket_name: str, key: str) -> int | None:
         return response["ContentLength"]
 
 
-async def list_objects_async(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterable[str]:
+async def list_objects_key_and_size_paginated_async(
+        bucket_name: str,
+        prefix: str | pathlib.Path="",
+        page_start_token: str | None = None,
+        max_page_size: int = 1_000,
+    ) -> tuple[list[tuple[str, int]], str | None]:
     """
-    List the objects found in the given prefix of the bucket
-    Some of the yielded keys will be 0 bytes placeholders for folders
+    Return objects key and bytes size in a paginated fashion
     """
     if isinstance(prefix, pathlib.Path):
         prefix = prefix.as_posix()
-    async with session.resource("s3") as s3_resource:
-        bucket = await s3_resource.Bucket(bucket_name)
-        async for obj in bucket.objects.filter(Prefix=prefix):
-            yield obj.key
+    async with session.client("s3") as s3_client:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pagination_config = {"PageSize": max_page_size}
+        if page_start_token:
+            pagination_config["StartingToken"] = page_start_token
+        async for page in paginator.paginate(
+            Bucket=bucket_name,
+            Prefix=prefix,
+            PaginationConfig=pagination_config,
+        ):
+            objects = [
+                (obj["Key"], obj["Size"])
+                for obj in page.get("Contents", [])
+            ]
+            return objects, page.get("NextContinuationToken")
+
+
+async def list_objects_key_and_size_async(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterable[tuple[str, int]]:
+    """
+    Yield object keys and bytes size in a bucket at a prefix
+    """
+    next_page_token = None
+    while True:
+        page, next_page_token = await list_objects_key_and_size_paginated_async(bucket_name, prefix)
+        for key, size in page:
+            yield key, size
+        if next_page_token is None:
+            return
+
+
+# async def list_objects_async(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterable[str]:
+#     """
+#     List the objects found in the given prefix of the bucket
+#     Some of the yielded keys will be 0 bytes placeholders for folders
+#     """
+#     if isinstance(prefix, pathlib.Path):
+#         prefix = prefix.as_posix()
+#     async with session.resource("s3") as s3_resource:
+#         bucket = await s3_resource.Bucket(bucket_name)
+#         async for obj in bucket.objects.filter(Prefix=prefix):
+#             yield obj.key
 
 
 async def upload_files_async(
@@ -156,13 +197,13 @@ async def download_files_async(
         if not directory.is_dir():
             raise NotADirectoryError(f"The provided directory path '{directory}' is a file")
         prefix = pathlib.Path(prefix)
-        for obj in list_objects_async(bucket_name, prefix):
-            file_path = directory / pathlib.Path(obj.key).relative_to(prefix)
+        for key, size in list_objects_key_and_size_async(bucket_name, prefix):
+            file_path = directory / pathlib.Path(key).relative_to(prefix)
             file_path.parent.mkdir(exist_ok=True, parents=True)
             file_path = file_path.as_posix()
-            await bucket.download_file(obj.key, file_path)
+            await bucket.download_file(key, file_path)
             if callback is not None:
-                callback(object_key=obj.key, file_path=file_path)
+                callback(object_key=key, file_path=file_path)
 
 
 async def upload_data_async(
@@ -227,7 +268,7 @@ async def delete_objects_async(bucket_name: str, prefix: str | pathlib.Path, cal
     """
     async with session.resource("s3") as s3_resource:
         bucket = await s3_resource.Bucket(bucket_name)
-        objects = [obj async for obj in list_objects_async(bucket_name, prefix)]
+        objects = [obj async for obj in list_objects_key_and_size_async(bucket_name, prefix)]
         delete = [{"Key": key} for i, key in zip(range(1_000), objects)]
         if len(delete) == 0:
             return

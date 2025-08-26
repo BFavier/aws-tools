@@ -2,7 +2,8 @@
 This module was automatically generated from aws_tools.asynchrone.ses
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.ses import BaseModel, Field, ConfigDict, Literal, Union, get_session, session, send_email_async, Mail, Recipient, BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SESEmailEvent, SESEventTypes
+from typing import Iterable, Iterator
+from aws_tools.asynchrone.ses import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, BaseModel, Field, ConfigDict, Literal, Union, get_session, session, send_email_async, _SESEvent, Mail, Recipient, BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SESEmailEvent, SESEventTypes
 
 
 def send_email(sender_email: str, recipient_emails: list[str], subject: str, body: str):

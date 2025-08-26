@@ -2,18 +2,18 @@
 This module was automatically generated from aws_tools.asynchrone.s3
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
-from aws_tools.asynchrone.s3 import os, pathlib, aioboto3, urlparse, Iterable, Callable, Optional, AsyncIterable, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_async, upload_files_async, download_files_async, upload_data_async, download_data_async, stream_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async, s3_uri_to_bucket_and_key
+from typing import Iterable, Iterator
+from aws_tools.asynchrone.s3 import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, os, pathlib, aioboto3, urlparse, Iterable, Callable, Optional, AsyncIterable, ClientError, session, S3Exception, create_bucket_async, delete_bucket_async, bucket_exists_async, object_exists_async, get_object_bytes_size_async, list_objects_key_and_size_paginated_async, list_objects_key_and_size_async, upload_files_async, download_files_async, upload_data_async, download_data_async, stream_data_async, delete_objects_async, copy_object_async, delete_object_async, move_object_async, initiate_multipart_upload_async, upload_part_async, complete_multipart_upload_async, abort_multipart_upload_async, generate_download_url_async, s3_uri_to_bucket_and_key
 
 
-def list_objects(bucket_name: str, prefix: str | pathlib.Path="") -> AsyncIterable[str]:
+def list_objects_key_and_size(bucket_name: str, prefix: str | pathlib.Path="") -> Iterable[tuple[str, int]]:
     """
-    List the objects found in the given prefix of the bucket
-    Some of the yielded keys will be 0 bytes placeholders for folders
+    Yield object keys and bytes size in a bucket at a prefix
     """
-    return _async_iter_to_sync(list_objects_async(bucket_name=bucket_name, prefix=prefix))
+    return _async_iter_to_sync(list_objects_key_and_size_async(bucket_name=bucket_name, prefix=prefix))
 
 
-def stream_data(bucket_name: str, key: str | pathlib.Path, chunk_size: int = 8192) -> AsyncIterable[bytes]:
+def stream_data(bucket_name: str, key: str | pathlib.Path, chunk_size: int = 8192) -> Iterable[bytes]:
     """
     Stream the data stored in the given S3 bucket file as async chunks.
     """
@@ -115,6 +115,18 @@ def get_object_bytes_size(bucket_name: str, key: str) -> int | None:
 
 def initiate_multipart_upload(bucket_name: str, key: str, content_type: str = 'application/octet-stream') -> str:
     return _run_async(initiate_multipart_upload_async(bucket_name=bucket_name, key=key, content_type=content_type))
+
+
+def list_objects_key_and_size_paginated(
+        bucket_name: str,
+        prefix: str | pathlib.Path="",
+        page_start_token: str | None = None,
+        max_page_size: int = 1_000,
+    ) -> tuple[list[tuple[str, int]], str | None]:
+    """
+    Return objects key and bytes size in a paginated fashion
+    """
+    return _run_async(list_objects_key_and_size_paginated_async(bucket_name=bucket_name, prefix=prefix, page_start_token=page_start_token, max_page_size=max_page_size))
 
 
 def move_object(
