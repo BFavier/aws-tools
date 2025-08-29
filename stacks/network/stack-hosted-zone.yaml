@@ -124,24 +124,8 @@ Resources:
     Properties:
       LogGroupName: /aws/lambda/NameServerChangeLambda
       RetentionInDays: 30
-  Certificate:
-    Type: AWS::CertificateManager::Certificate
-    DependsOn: NameServerChangeCustomResource
-    Condition: IsPublicZone
-    Properties:
-      DomainName: !Sub '*.${DomainName}'
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Sub '*.${DomainName}'
-          HostedZoneId: !Ref HostedZone
-      Tags:
-        - Key: Name
-          Value: !Sub ${DomainName}Certificate
 
 Outputs:
-  CertificateArn:
-    Value: !Ref Certificate
-    Condition: IsPublicZone
   DomainName:
     Value: !Ref DomainName
   HostedZoneId:
