@@ -378,9 +378,9 @@ async def generate_download_url_async(bucket_name: str, key: str, expiration: in
 
 def s3_uri_to_bucket_and_key(s3_uri: str) -> tuple[str, str]:
     """
-    Splits an 's3://bucket-name/object/key' uri into a (bucket_name, object_key) tuple of str
+    Splits an "s3://bucket-name/s3/path" uri into a ("bucket-name", "s3/path") tuple of str
     """
     parsed = urlparse(s3_uri)
     scheme, s3_bucket, s3_object_key = parsed.scheme, parsed.netloc, parsed.path
     assert scheme == "s3"
-    return s3_bucket, s3_object_key
+    return s3_bucket, s3_object_key.lstrip("/")
