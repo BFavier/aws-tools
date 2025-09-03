@@ -460,3 +460,7 @@ Resources:
       BucketName: !Ref EmailsBucketName
       LambdaArn: !GetAtt StoreEmailLambda.Arn
       Prefix: !Sub "${EmailsPrefix}all/"
+
+Outputs:
+  SESConfigurationSet:
+    Value: !Ref SESConfigurationSet

@@ -8,15 +8,26 @@ https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-exampl
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal, Union
 from aiobotocore.session import get_session
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 
 
 session = get_session()
 
 
-async def send_email_async(sender_email: str, recipient_emails: list[str], subject: str, body: str):
+
+async def send_email_async(
+        sender_email: str,
+        recipient_emails: list[str],
+        subject: str,
+        body: str,
+        configuration_set: str | None = None,
+    ):
     """
     Send an email to the given recipients
     """
+    kwargs = {} if configuration_set is None else {"ConfigurationSetName": configuration_set}
     async with session.create_client("ses") as ses:
         await ses.send_email(
             Source=sender_email,
@@ -27,7 +38,58 @@ async def send_email_async(sender_email: str, recipient_emails: list[str], subje
                 'Subject': {'Charset': 'UTF-8', 'Data': subject},
                 'Body': {'Html': {'Charset': 'UTF-8', 'Data': body},}
             },
+            **kwargs
         )
+
+
+async def send_raw_email_async(
+    sender_email: str,
+    recipient_emails: list[str],
+    subject: str,
+    text: str | None = None,
+    html: str | None = None,
+    attachments: dict[str, bytes] = {},
+    configuration_set: str | None = None,
+):
+    """
+    Send an email with optional file attachments via AWS SES
+    """
+    # Build MIME email
+    msg = MIMEMultipart("mixed" if len(attachments) > 0 else "alternative")
+    msg["Subject"] = subject
+    msg["From"] = sender_email
+    msg["To"] = ", ".join(recipient_emails)
+    # Add email body
+    if text is not None and html is not None:
+        # multipart/alternative inside multipart/mixed
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(text, "plain", "utf-8"))
+        alt.attach(MIMEText(html, "html", "utf-8"))
+        msg.attach(alt)
+    elif text is not None:
+        msg.attach(MIMEText(text, "plain", "utf-8"))
+    elif html is not None:
+        msg.attach(MIMEText(html, "html", "utf-8"))
+    # Add attachments if provided
+    for file_name, file_content in attachments.items():
+        part = MIMEApplication(file_content)
+        part.add_header(
+            "Content-Disposition",
+            "attachment",
+            filename=file_name
+        )
+        msg.attach(part)
+    # Send via SES
+    kwargs = {} if configuration_set is None else {"ConfigurationSetName": configuration_set}
+    async with session.create_client("ses") as ses:
+        response = await ses.send_raw_email(
+            Source=sender_email,
+            Destinations=recipient_emails,
+            RawMessage={"Data": msg.as_bytes()},
+            **kwargs
+        )
+
+    return response
 
 
 class _SESEvent(BaseModel):
@@ -226,3 +288,14 @@ class SESEmailEvent(_SESEvent):
 
 SESEventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SESEmailEvent]
 assert set(_SESEvent.__subclasses__()) == set(SESEventTypes.__args__)
+
+
+if __name__ == "__main__":
+    import asyncio
+    mail_from = "contact@sleek-simulations.com"
+    mail_to = "benoitfamillefavier@gmail.com"
+    # asyncio.run(send_email_async(mail_from, [mail_to], subject="Test non-raw email", body="ok"))
+    # send_raw_email(mail_from, recipient_emails=[mail_to], subject="raw email without attachment", text="ok", html="<p>ok</p>")
+    asyncio.run(send_raw_email_async(mail_from, recipient_emails=[mail_to], subject="Hello Benoit", html="<p>Hello !</p>", attachments={"file.txt": "ok"}))
+    # send_raw_email(mail_from, recipient_emails=[mail_to], subject="raw email without attachment and text only", text="ok")
+    # send_raw_email(mail_from, recipient_emails=[mail_to], subject="raw email with attachment", text="ok", html="<p>ok</p>")
