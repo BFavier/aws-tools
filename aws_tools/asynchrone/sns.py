@@ -2,7 +2,6 @@
 Here below the documentation of the expected payload format for the API route handling SNS topic subscription :
 https://docs.aws.amazon.com/sns/latest/dg/sns-message-and-json-formats.html
 """
-import aws_tools
 import base64
 import aiohttp
 from aiobotocore.session import get_session

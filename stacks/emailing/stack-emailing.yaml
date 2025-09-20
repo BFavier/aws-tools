@@ -16,19 +16,18 @@ Parameters:
     Type: CommaDelimitedList
     Description: The list of events that should be captured for sent emails
     Default: "SEND,REJECT,BOUNCE,COMPLAINT,DELIVERY,OPEN,CLICK,SUBSCRIPTION"
-  SQSRetentionInSeconds:
-    Type: Number
-    Description: How long the email events are retained in the SQS queue
-    Default: 345600   # 4 days
-    MinValue: 60      # 1 minute
-    MaxValue: 1209600 # 14 days
-  EventsUrl:
+  EventsWebhookUrl:
     Type: String
-    Description: 'Optional as events are stored in an SQS queue as well. The url at which a POST request is sent to on emailing event, with an SNS event as plain text body (ex: "https://api.domain-name.com/mail-bounce-or-complaint"), containing the SES event in the "Message" field of SNSNotificationRequest. See the SESEventTypes and SNSEventsTypes pydantic classes in "aws_tools" package.'
+    Description: 'Ignored if an empty string is passed. The url at which a POST request is sent to on email event, with an SNS event as plain text body (ex: "https://api.domain-name.com/mail-bounce-or-complaint"), containing the SES event in the "Message" field of SNSNotificationRequest. See the SESEventTypes and SNSEventsTypes pydantic classes in "aws_tools" package.'
     Default: ""
+  EventsQueueArn:
+    Type: String
+    Description: 'Ignored if an empty string is passed. The SQS queue in which a message is sent on email event.'
 
 Conditions:
-  SESEventsWebhookEnabled: !Not [!Equals [!Ref EventsUrl, ""]]
+  EventsWebhookEnabled: !Not [!Equals [!Ref EventsWebhookUrl, ""]]
+  EventsQueueEnabled: !Not [!Equals [!Ref EventsQueueArn, ""]]
+
 
 Resources:
   # save received emails in chosen prefix + "all/"
@@ -264,41 +263,21 @@ Resources:
         SnsDestination:
           TopicARN: !Ref SESEventsSNSTopic
   # SQS queue
-  SESEventsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: SESEventsQueue
-      MessageRetentionPeriod: !Ref SQSRetentionInSeconds
-  SESEventsQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref SESEventsQueue
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: sns.amazonaws.com
-            Action: SQS:SendMessage
-            Resource: !GetAtt SESEventsQueue.Arn
-            Condition:
-              ArnEquals:
-                aws:SourceArn: !Ref SESEventsSNSTopic
-  DomainSQSSubscription:
+  SQSSubscription:
+    Condition: EventsQueueEnabled
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref SESEventsSNSTopic
       Protocol: sqs
-      Endpoint: !GetAtt SESEventsQueue.Arn
+      Endpoint: !Ref EventsQueueArn
   # webhook
-  DomainSNSTopicSubscription:
-    Condition: SESEventsWebhookEnabled
+  WebhookSubscription:
+    Condition: EventsWebhookEnabled
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref SESEventsSNSTopic
-      Protocol: !Select [0, !Split [":", !Ref EventsUrl]]  # https or http depending on the provided url
-      Endpoint: !Ref EventsUrl
+      Protocol: !Select [0, !Split [":", !Ref EventsWebhookUrl]]  # https or http depending on the provided url
+      Endpoint: !Ref EventsWebhookUrl
 
   # ressources to copy the received email in /all into the recipient folder
   StoreEmailLambda:
@@ -504,5 +483,3 @@ Resources:
 Outputs:
   SESConfigurationSet:
     Value: !Ref SESConfigurationSet
-  SESEventsQueue:
-    Value: !Ref SESEventsQueue
