@@ -1,0 +1,159 @@
+{
+    "version": "0",
+    "id": "105f6bb1-4da6-c630-4965-35383018cbca",
+    "detail-type": "ECS Task State Change",
+    "source": "aws.ecs",
+    "account": "123456789012",
+    "time": "2025-05-06T11:02:34Z",
+    "region": "us-east-1",
+    "resources": [
+        "arn:aws:ecs:us-east-1:123456789012:task/example-cluster/a1173316d40a45dea9"
+    ],
+    "detail": {
+        "attachments": [
+            {
+                "id": "fe3a9a46-6a47-40ee-afd9-7952ae90a75a",
+                "type": "eni",
+                "status": "ATTACHED",
+                "details": [
+                    {
+                        "name": "subnetId",
+                        "value": "subnet-0d0eab1bb38d5ca64"
+                    },
+                    {
+                        "name": "networkInterfaceId",
+                        "value": "eni-0103a2f01bad57d71"
+                    },
+                    {
+                        "name": "macAddress",
+                        "value": "0e:50:d1:c1:77:81"
+                    },
+                    {
+                        "name": "privateDnsName",
+                        "value": "ip-10-0-1-163.ec2.internal"
+                    },
+                    {
+                        "name": "privateIPv4Address",
+                        "value": "10.0.1.163"
+                    }
+                ]
+            }
+        ],
+        "attributes": [
+            {
+                "name": "ecs.cpu-architecture",
+                "value": "x86_64"
+            }
+        ],
+        "availabilityZone": "us-east-1b",
+        "capacityProviderName": "FARGATE",
+        "clusterArn": "arn:aws:ecs:us-east-1:123456789012:cluster/example-cluster",
+        "connectivity": "CONNECTED",
+        "connectivityAt": "2025-05-06T11:02:17.19Z",
+        "containers": [
+            {
+                "containerArn": "arn:aws:ecs:us-east-1:123456789012:container/example-cluster/a1173316d40a45dea9/a0a99b87-baa8-4bf6-b9f1-a9a95917a635",
+                "lastStatus": "RUNNING",
+                "name": "web",
+                "image": "nginx",
+                "imageDigest": "sha256:c15da6c91de8d2f436196f3a768483ad32c258ed4e1beb3d367a27ed67253e66",
+                "runtimeId": "a1173316d40a45dea9-0265927825",
+                "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example-cluster/a1173316d40a45dea9",
+                "networkInterfaces": [
+                    {
+                        "attachmentId": "fe3a9a46-6a47-40ee-afd9-7952ae90a75a",
+                        "privateIpv4Address": "10.0.1.163"
+                    }
+                ],
+                "cpu": "99",
+                "memory": "100"
+            },
+            {
+                "containerArn": "arn:aws:ecs:us-east-1:123456789012:container/example-cluster/a1173316d40a45dea9/a2010e2d-ba7c-4135-8b79-e0290ff3cd8c",
+                "lastStatus": "RUNNING",
+                "name": "aws-guardduty-agent-nm40lC",
+                "imageDigest": "sha256:bf9197abdf853607e5fa392b4f97ccdd6ca56dd179be3ce8849e552d96582ac8",
+                "runtimeId": "a1173316d40a45dea9-2098416933",
+                "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example-cluster/a1173316d40a45dea9",
+                "networkInterfaces": [
+                    {
+                        "attachmentId": "fe3a9a46-6a47-40ee-afd9-7952ae90a75a",
+                        "privateIpv4Address": "10.0.1.163"
+                    }
+                ],
+                "cpu": "null"
+            },
+            {
+                "containerArn": "arn:aws:ecs:us-east-1:123456789012:container/example-cluster/a1173316d40a45dea9/dccf0ca2-d929-471f-a5c3-98006fd4379e",
+                "lastStatus": "RUNNING",
+                "name": "aws-otel-collector",
+                "image": "public.ecr.aws/aws-observability/aws-otel-collector:v0.32.0",
+                "imageDigest": "sha256:7a1b3560655071bcacd66902c20ebe9a69470d5691fe3bd36baace7c2f3c4640",
+                "runtimeId": "a1173316d40a45dea9-4027662657",
+                "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example-cluster/a1173316d40a45dea9",
+                "networkInterfaces": [
+                    {
+                        "attachmentId": "fe3a9a46-6a47-40ee-afd9-7952ae90a75a",
+                        "privateIpv4Address": "10.0.1.163"
+                    }
+                ],
+                "cpu": "0"
+            }
+        ],
+        "cpu": "256",
+        "createdAt": "2025-05-06T11:02:13.877Z",
+        "desiredStatus": "RUNNING",
+        "enableExecuteCommand": false,
+        "ephemeralStorage": {
+            "sizeInGiB": 20
+        },
+        "group": "family:webserver",
+        "launchType": "FARGATE",
+        "lastStatus": "RUNNING",
+        "memory": "512",
+        "overrides": {
+            "containerOverrides": [
+                {
+                    "name": "web"
+                },
+                {
+                    "environment": [
+                        {
+                            "name": "CLUSTER_NAME",
+                            "value": "example-cluster"
+                        },
+                        {
+                            "name": "REGION",
+                            "value": "us-east-1"
+                        },
+                        {
+                            "name": "HOST_PROC",
+                            "value": "/host_proc"
+                        },
+                        {
+                            "name": "AGENT_RUNTIME_ENVIRONMENT",
+                            "value": "ecsfargate"
+                        },
+                        {
+                            "name": "STAGE",
+                            "value": "prod"
+                        }
+                    ],
+                    "memory": 128,
+                    "name": "aws-guardduty-agent-nm40lC"
+                },
+                {
+                    "name": "aws-otel-collector"
+                }
+            ]
+        },
+        "platformVersion": "1.4.0",
+        "pullStartedAt": "2025-05-06T11:02:24.162Z",
+        "pullStoppedAt": "2025-05-06T11:02:33.493Z",
+        "startedAt": "2025-05-06T11:02:34.325Z",
+        "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example-cluster/a1173316d40a45dea9",
+        "taskDefinitionArn": "arn:aws:ecs:us-east-1:123456789012:task-definition/webserver:5",
+        "updatedAt": "2025-05-06T11:02:34.325Z",
+        "version": 3
+    }
+}

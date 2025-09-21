@@ -180,12 +180,12 @@ def put_item(table_name: str, item: dict, overwrite: bool=False, return_object: 
 def query_items(
         table_name: str,
         hash_key: object,
+        page_start_token: str | None,
         sort_key_filter: str | tuple[object|None, object|None] = (None, None),
         ascending: bool=True,
         conditions: ConditionBase | None = None,
         subset: list[str] | None = None,
         page_size: int | None = 1_000,
-        page_start_token: str | None = None,
         consistent_read: bool=False,
     ) -> tuple[list[dict], str | None]:
     """
@@ -235,7 +235,7 @@ def query_items(
     >>>     print(item)
     {"uuid": "ID0", "field": 10.0}
     """
-    return _run_async(query_items_async(table_name=table_name, hash_key=hash_key, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size, page_start_token=page_start_token, consistent_read=consistent_read))
+    return _run_async(query_items_async(table_name=table_name, hash_key=hash_key, page_start_token=page_start_token, sort_key_filter=sort_key_filter, ascending=ascending, conditions=conditions, subset=subset, page_size=page_size, consistent_read=consistent_read))
 
 
 def scan_items(

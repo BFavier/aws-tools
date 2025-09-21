@@ -1,27 +1,27 @@
 from typing import Literal, Iterable
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from aiobotocore.session import get_session
 
 
 class SQSMessageAttribute(BaseModel):
-    DataType: Literal["String", "Number", "Binary"]
-    StringValue: str = ""
-    BinaryValue: bytes = b""
-    StringListValues: list[str] = []
-    BinaryListValues: list[bytes] = []
+    data_type: Literal["String", "Number", "Binary"] = Field(..., alias="DataType")
+    string_value: str = Field("", alias="StringValue")
+    binary_value: bytes = Field(b"", alias="BinaryValue")
+    string_list_values: list[str] = Field([], alias="StringListValues")
+    binary_list_values: list[bytes] = Field([], alias="BinaryListValues")
 
 
 class SQSMessage(BaseModel):
-    Body: str
-    MessageAttributes: dict[str, SQSMessageAttribute] = {}
+    body: str = Field(..., alias="Body")
+    message_attributes: dict[str, SQSMessageAttribute] = Field({}, alias="MessageAttributes")
 
 
 class SQSMessageResponse(SQSMessage):
-    MessageId: str
-    ReceiptHandle: str
-    MD5OfBody: str
-    Attributes: dict[str, str]
-    MD5OfMessageAttributes: str
+    message_id: str = Field(..., alias="MessageId")
+    receipt_handle: str = Field(..., alias="ReceiptHandle")
+    MD5_of_body: str = Field(..., alias="MD5OfBody")
+    attributes: dict[str, str] = Field(..., alias="Attributes")
+    md5_of_attributes: str = Field(..., alias="MD5OfMessageAttributes")
 
 
 session = get_session()
@@ -58,7 +58,7 @@ async def send_sqs_message_async(queue_url: str, message: SQSMessage, delay_seco
         response = await sqs.send_message(
             QueueUrl=queue_url,
             MessageBody=message.Body,
-            MessageAttributes={k: v.model_dump() for k, v in message.MessageAttributes.items()},
+            MessageAttributes={k: v.model_dump(by_alias=True) for k, v in message.MessageAttributes.items()},
             DelaySeconds=delay_seconds,
         )
         return SQSMessageResponse(**response)
@@ -85,7 +85,7 @@ async def batch_send_sqs_messages_async(queue_url: str, messages: Iterable[SQSMe
                     {
                         "Id": k,
                         "MessageBody": m.Body,
-                        "MessageAttributes": {k: v.model_dump() for k, v in m.MessageAttributes.items()},
+                        "MessageAttributes": {k: v.model_dump(by_alias=True) for k, v in m.MessageAttributes.items()},
                         "DelaySeconds": delay_seconds,
                     }
                     for k, m in batch.items()

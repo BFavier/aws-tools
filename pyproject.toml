@@ -7,16 +7,9 @@ name = "aws-tools"
 dynamic = ["version"]
 requires-python = ">= 3.12"
 dependencies = [
-  "aioboto3 >= 14.3.0"
-]
-
-[project.optional-dependencies]
-sns = [
+  "aioboto3 >= 14.3.0",
+  "pydantic >= 2.10.5",
   "cryptography >= 43.0.1",
-  "pydantic >= 2.10.5",
-]
-ses = [
-  "pydantic >= 2.10.5",
 ]
 
 [tool.setuptools.packages.find]

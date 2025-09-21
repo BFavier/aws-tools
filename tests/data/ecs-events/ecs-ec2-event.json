@@ -1,0 +1,115 @@
+{
+    "version": "0",
+    "id": "a65cf262-f104-0dd5-ceda-4b09ba71a441",
+    "detail-type": "ECS Task State Change",
+    "source": "aws.ecs",
+    "account": "123456789012",
+    "time": "2025-05-12T13:12:06Z",
+    "region": "us-east-1",
+    "resources": [
+        "arn:aws:ecs:us-east-1:123456789012:task/example/c1ffa94f19a540ed8d9f7e1d2a5d"
+    ],
+    "detail": {
+        "attachments": [
+            {
+                "id": "52333e3b-b812-41a8-b057-9ed184bbe5e1",
+                "type": "eni",
+                "status": "ATTACHED",
+                "details": [
+                    {
+                        "name": "subnetId",
+                        "value": "subnet-0d0eab1bb38d5ca64"
+                    },
+                    {
+                        "name": "networkInterfaceId",
+                        "value": "eni-0ea90f746500773a4"
+                    },
+                    {
+                        "name": "macAddress",
+                        "value": "0e:d5:9b:ce:49:fb"
+                    },
+                    {
+                        "name": "privateDnsName",
+                        "value": "ip-10-0-1-37.ec2.internal"
+                    },
+                    {
+                        "name": "privateIPv4Address",
+                        "value": "10.0.1.37"
+                    }
+                ]
+            }
+        ],
+        "attributes": [
+            {
+                "name": "ecs.cpu-architecture",
+                "value": "x86_64"
+            }
+        ],
+        "availabilityZone": "us-east-1b",
+        "capacityProviderName": "Infra-ECS-Cluster-example-fa84e0cc-AsgCapacityProvider-OseQJU9pizmp",
+        "clusterArn": "arn:aws:ecs:us-east-1:123456789012:cluster/example",
+        "connectivity": "CONNECTED",
+        "connectivityAt": "2025-05-12T13:11:44.98Z",
+        "containerInstanceArn": "arn:aws:ecs:us-east-1:123456789012:container-instance/example/d1d84798400f49f3b21cb61610c1e",
+        "containers": [
+            {
+                "containerArn": "arn:aws:ecs:us-east-1:123456789012:container/example/c1ffa94f19a540ed8d9f7e1d2a5d3626/197d0994-5367-4a6d-9f9a-f075e4a6",
+                "lastStatus": "RUNNING",
+                "name": "aws-otel-collector",
+                "image": "public.ecr.aws/aws-observability/aws-otel-collector:v0.32.0",
+                "imageDigest": "sha256:7a1b3560655071bcacd66902c20ebe9a69470d5691fe3bd36baace7c2f3c4640",
+                "runtimeId": "8e926f0ccd8fe2b459926f49584ba6d33a3d9f61398dbabe944ee6a13a8ff3a1",
+                "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example/c1ffa94f19a540ed8d9f7e1d2a5d",
+                "networkInterfaces": [
+                    {
+                        "attachmentId": "52333e3b-b812-41a8-b057-9ed184bbe5e1",
+                        "privateIpv4Address": "10.0.1.37"
+                    }
+                ],
+                "cpu": "0"
+            },
+            {
+                "containerArn": "arn:aws:ecs:us-east-1:123456789012:container/example/c1ffa94f19a540ed8d9f7e1d2a5d3626/cab39ef0-9c50-459d-844b-b9d51d73d",
+                "lastStatus": "RUNNING",
+                "name": "web",
+                "image": "nginx",
+                "imageDigest": "sha256:c15da6c91de8d2f436196f3a768483ad32c258ed4e1beb3d367a27ed67253e66",
+                "runtimeId": "9f1c73f0094f051541d9e5c2ab1e172d83c4eb5171bcc857c4504b02770ff3b8",
+                "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example/c1ffa94f19a540ed8d9f7e1d2a5d",
+                "networkInterfaces": [
+                    {
+                        "attachmentId": "52333e3b-b812-41a8-b057-9ed184bbe5e1",
+                        "privateIpv4Address": "10.0.1.37"
+                    }
+                ],
+                "cpu": "99",
+                "memory": "100"
+            }
+        ],
+        "cpu": "256",
+        "createdAt": "2025-05-12T13:11:44.98Z",
+        "desiredStatus": "RUNNING",
+        "enableExecuteCommand": false,
+        "group": "family:webserver",
+        "launchType": "EC2",
+        "lastStatus": "RUNNING",
+        "memory": "512",
+        "overrides": {
+            "containerOverrides": [
+                {
+                    "name": "aws-otel-collector"
+                },
+                {
+                    "name": "web"
+                }
+            ]
+        },
+        "pullStartedAt": "2025-05-12T13:11:59.491Z",
+        "pullStoppedAt": "2025-05-12T13:12:05.896Z",
+        "startedAt": "2025-05-12T13:12:06.053Z",
+        "taskArn": "arn:aws:ecs:us-east-1:123456789012:task/example/c1ffa94f19a540ed8d9f7e1d2a5d",
+        "taskDefinitionArn": "arn:aws:ecs:us-east-1:123456789012:task-definition/webserver",
+        "updatedAt": "2025-05-12T13:12:06.053Z",
+        "version": 4
+    }
+}

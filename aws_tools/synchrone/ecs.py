@@ -3,7 +3,7 @@ This module was automatically generated from aws_tools.asynchrone.ecs
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
 from typing import Iterable, Iterator
-from aws_tools.asynchrone.ecs import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, get_session, Literal, Iterable, AsyncIterable, Optional, ClientError, session, run_fargate_task_async, stop_fargate_task_async, get_tasks_descriptions_async, TASK_STATUSES, get_tasks_statuses_async, task_is_running_async, task_exists_async, get_task_tags_async
+from aws_tools.asynchrone.ecs import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, BaseModel, Field, get_session, Literal, Iterable, AsyncIterable, Optional, ClientError, session, run_fargate_task_async, stop_fargate_task_async, get_tasks_descriptions_async, TASK_STATUSES, get_tasks_statuses_async, task_is_running_async, task_exists_async, get_task_tags_async, Attribute, NetworkInterface, ECSContainer, ECSTaskStatus, ECSTaskDetails, ECSTaskStateChangeEvent
 
 
 def get_tasks_descriptions(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> Iterable[dict | None]:

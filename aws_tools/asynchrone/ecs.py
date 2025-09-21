@@ -1,3 +1,4 @@
+from pydantic import BaseModel, Field
 from aiobotocore.session import get_session
 from typing import Literal, Iterable, AsyncIterable, Optional
 from botocore.exceptions import ClientError
@@ -129,3 +130,71 @@ async def get_task_tags_async(cluster_name: str, task_arn: str) -> dict[str, str
             return None
         else:
             return {tag["key"]: tag["value"] for tag in description["tags"]}
+
+
+class Attribute(BaseModel):
+    name: str
+    value: str
+
+
+class NetworkInterface(BaseModel):
+    attachmentId: str
+    privateIpv4Address: str
+
+
+class ECSContainer(BaseModel):
+    containerArn: str
+    lastStatus: str
+    name: str
+    image: str | None = None
+    imageDigest: str
+    runtimeId: str
+    taskArn: str
+    networkInterfaces: list[NetworkInterface]
+    cpu: str
+
+
+ECSTaskStatus = Literal["PROVISIONING", "PENDING", "ACTIVATING", "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED", "DELETED"]
+
+
+class ECSTaskDetails(BaseModel):
+    attachments: list[dict]
+    attributes: list[Attribute]
+    availabilityZone: str
+    capacityProviderName: str
+    clusterArn: str
+    connectivity: str
+    connectivityAt: str
+    containerInstanceArn: str | None = None
+    containers: list[ECSContainer]
+    cpu: str
+    createdAt: str
+    desiredStatus: ECSTaskStatus
+    enableExecuteCommand: bool
+    group: str
+    launchType: Literal["EC2", "FARGATE"]
+    lastStatus: ECSTaskStatus
+    memory: str
+    overrides: dict
+    pullStartedAt: str
+    pullStoppedAt: str
+    startedAt: str
+    taskArn: str
+    taskDefinitionArn: str
+    updatedAt: str
+    version: int
+
+
+class ECSTaskStateChangeEvent(BaseModel):
+    """
+    Event on ECS task state change, as captured by event bridge
+    """
+    version: str
+    id: str
+    detail_type: str = Field(..., alias="detail-type")
+    source: str
+    account: str
+    time: str
+    region: str
+    resources: list[str]
+    detail: ECSTaskDetails
