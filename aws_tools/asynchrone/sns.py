@@ -27,60 +27,47 @@ HEADERS = [
 ]
 
 
-class _SNSEvents(BaseModel):
-    pass
-
-
-class SNSSubscriptionConfirmationRequest(_SNSEvents):
+class SNSEvent(BaseModel):
     """
-    https://docs.aws.amazon.com/sns/latest/dg/http-subscription-confirmation-json.html
+    Base class for SNS events
     """
-    Type: Literal["SubscriptionConfirmation"]
+    Type: str
+    TopicArn: Annotated[str, "arn:aws:sns:us-west-2:123456789012:MyTopic"]
     MessageId: Annotated[str, "165545c9-2a5c-472c-8df2-7ff2be2b3b1b"]
-    Token: Annotated[str, "2336412f37..."]
-    TopicArn: Annotated[str, "arn:aws:sns:us-west-2:123456789012:MyTopic"]
     Message: Annotated[str, ""]
-    SubscribeURL: Annotated[str, ""]
-    Timestamp: Annotated[str, ""]
-    SignatureVersion: Annotated[str, "1"]
-    Signature: Annotated[str, "EXAMPLEpH+DcEwjAPg8O9mY8dReBSwksfg2S7WKQcikcNKWLQjwu6A4VbeS0QHVCkhRS7fUQvi2egU3N858fiTDN6bkkOxYDVrY0Ad8L10Hs3zH81mtnPk5uvvolIC1CXGu43obcgFxeL3khZl8IKvO61GWB6jI9b5+gLPoBc1Q="]
-    SigningCertURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/SimpleNotificationService-f3ecfb7224c7233fe7bb5f59f96de52f.pem"]
-
-
-class SNSNotificationRequest(_SNSEvents):
-    """
-    https://docs.aws.amazon.com/sns/latest/dg/http-notification-json.html
-    """
-    Type: Literal["Notification"]
-    MessageId: Annotated[str, "22b80b92-fdea-4c2c-8f9d-bdfb0c7bf324"]
-    TopicArn: Annotated[str, "arn:aws:sns:us-west-2:123456789012:MyTopic"]
-    Subject: Annotated[str, "My First Message"]
-    Message: Annotated[str, "Hello world!"]
-    Timestamp: Annotated[str, "2012-05-02T00:54:06.655Z"]
-    SignatureVersion: Annotated[str, "1"]
-    Signature: Annotated[str, "EXAMPLEw6JRN..."]
-    SigningCertURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/SimpleNotificationService-f3ecfb7224c7233fe7bb5f59f96de52f.pem"]
-    UnsubscribeURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:us-west-2:123456789012:MyTopic:c9135db0-26c4-47ec-8998-413945fb5a96"]
-
-
-class SNSUnsubscribeRequest(_SNSEvents):
-    """
-    https://docs.aws.amazon.com/sns/latest/dg/http-unsubscribe-confirmation-json.html
-    """
-    Type: Literal["UnsubscribeConfirmation"]
-    MessageId: Annotated[str, "47138184-6831-46b8-8f7c-afc488602d7d"]
-    Token: Annotated[str, "2336412f37..."]
-    TopicArn: Annotated[str, "arn:aws:sns:us-west-2:123456789012:MyTopic"]
-    Message: Annotated[str, "You have chosen to deactivate subscription arn:aws:sns:us-west-2:123456789012:MyTopic:2bcfbf39-05c3-41de-beaa-fcfcc21c8f55.\nTo cancel this operation and restore the subscription, visit the SubscribeURL included in this message."]
-    SubscribeURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:sns:us-west-2:123456789012:MyTopic&Token=2336412f37fb6..."]
     Timestamp: Annotated[str, "2012-04-26T20:06:41.581Z"]
     SignatureVersion: Annotated[str, "1"]
     Signature: Annotated[str, "EXAMPLEHXgJm..."]
     SigningCertURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/SimpleNotificationService-f3ecfb7224c7233fe7bb5f59f96de52f.pem"]
 
 
+class SNSSubscriptionConfirmationRequest(SNSEvent):
+    """
+    https://docs.aws.amazon.com/sns/latest/dg/http-subscription-confirmation-json.html
+    """
+    Type: Literal["SubscriptionConfirmation"]
+    Token: Annotated[str, "2336412f37..."]
+    SubscribeURL: Annotated[str, ""]
+
+
+class SNSNotificationRequest(SNSEvent):
+    """
+    https://docs.aws.amazon.com/sns/latest/dg/http-notification-json.html
+    """
+    Type: Literal["Notification"]
+    Subject: Annotated[str, "My First Message"]
+
+class SNSUnsubscribeRequest(SNSEvent):
+    """
+    https://docs.aws.amazon.com/sns/latest/dg/http-unsubscribe-confirmation-json.html
+    """
+    Type: Literal["UnsubscribeConfirmation"]
+    Token: Annotated[str, "2336412f37..."]
+    SubscribeURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:sns:us-west-2:123456789012:MyTopic&Token=2336412f37fb6..."]
+
+
 SNSEventsTypes = Union[SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest]
-assert set(_SNSEvents.__subclasses__()) == set(SNSEventsTypes.__args__)
+assert set(SNSEvent.__subclasses__()) == set(SNSEventsTypes.__args__)
 
 
 async def send_sms_async(phone_number: str, message: str):
