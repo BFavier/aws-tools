@@ -20,8 +20,8 @@ class SQSMessageResponse(SQSMessage):
     message_id: str = Field(..., alias="MessageId")
     receipt_handle: str = Field(..., alias="ReceiptHandle")
     MD5_of_body: str = Field(..., alias="MD5OfBody")
-    attributes: dict[str, str] = Field(..., alias="Attributes")
-    md5_of_attributes: str = Field(..., alias="MD5OfMessageAttributes")
+    attributes: dict[str, str] = Field({}, alias="Attributes")
+    md5_of_attributes: str | None = Field(None, alias="MD5OfMessageAttributes")
 
 
 session = get_session()
@@ -31,7 +31,7 @@ async def poll_sqs_message_async(queue_url: str, max_messages: int=10, wait_seco
     """
     Poll messages in an sqs queue
     """
-    async with session.client("sqs") as sqs:
+    async with session.create_client("sqs") as sqs:
         response = await sqs.receive_message(
             QueueUrl=queue_url,
             MaxNumberOfMessages=max_messages,
@@ -44,7 +44,7 @@ async def delete_sqs_event_async(queue_url: str, receipt_handle: str):
     """
     After processing a polled event, you have to delete it, otherwise after 30s, it will appear back in the queue.
     """
-    async with session.client("sqs") as sqs:
+    async with session.create_client("sqs") as sqs:
         await sqs.delete_message(
             QueueUrl=queue_url,
             ReceiptHandle=receipt_handle,
@@ -54,7 +54,7 @@ async def delete_sqs_event_async(queue_url: str, receipt_handle: str):
 async def send_sqs_message_async(queue_url: str, message: SQSMessage, delay_seconds: int=0):
     """
     """
-    async with session.clien("sqs") as sqs:
+    async with session.create_client("sqs") as sqs:
         response = await sqs.send_message(
             QueueUrl=queue_url,
             MessageBody=message.Body,
@@ -71,7 +71,7 @@ async def batch_send_sqs_messages_async(queue_url: str, messages: Iterable[SQSMe
     iterable = iter(messages)
     message_to_process = True
     batch: dict[str, SQSMessage] = {}
-    async with session.client("sqs") as sqs:
+    async with session.create_client("sqs") as sqs:
         while message_to_process or len(batch) > 0:
             while len(batch) < chunk_size:
                 try:

@@ -1,0 +1,11 @@
+{
+    "Type": "Notification",
+    "MessageId": "9cbc79d5-38ea-51bf-b9aa-189c2785aac6",
+    "TopicArn": "arn:aws:sns:eu-west-1:717279735548:SESEventsTopic",
+    "Message": "Successfully validated SNS topic for Amazon SES event publishing.",
+    "Timestamp": "2025-09-20T21:31:27.640Z",
+    "SignatureVersion": "1",
+    "Signature": "LFjsbCTROOYOzzMFNwzmzkrgSIwUyWHw/Qp8zURP4tVaUC4EnmA+n31kH52vhEYXYA0LxsMdO7KS/4I4mFB2fxTk1GCBdXA+WpEB4kzok8NW36t6um/1w0+CRx2BOx6T0GbjH8fJ5IrvbQeggowpnHUVAv5izfFO7XfzpvKUzcxeptaBRB50lG1pNi501mmp7vqwcoJ0HtybmjLjIOrh0B13GR34G2dXsJdQ2brNtkZTf02p985+nPNLNfjxTk/IJlX9dVqlB52h7qvFgPQYGDph+KIrxb6IM8Rkohsl1ivJkiMNjNpFbnmk47EgSOP4T8/T8b6+eXsy6+ggHlzroA==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-6209c161c6221fdf56ec1eb5c821d112.pem",
+    "UnsubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-west-1:717279735548:SESEventsTopic:7c453279-e77c-4086-bd10-0e3d85f4b2da"
+}

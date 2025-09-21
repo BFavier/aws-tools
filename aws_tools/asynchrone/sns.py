@@ -55,7 +55,7 @@ class SNSNotificationRequest(SNSEvent):
     https://docs.aws.amazon.com/sns/latest/dg/http-notification-json.html
     """
     Type: Literal["Notification"]
-    Subject: Annotated[str, "My First Message"]
+    Subject: Annotated[str, "My First Message"] | None = None
 
 class SNSUnsubscribeRequest(SNSEvent):
     """
