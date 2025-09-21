@@ -18,7 +18,7 @@ Parameters:
     Default: "SEND,REJECT,BOUNCE,COMPLAINT,DELIVERY,OPEN,CLICK,SUBSCRIPTION"
   EventsWebhookUrl:
     Type: String
-    Description: 'Ignored if an empty string is passed. The url at which a POST request is sent to on email event, with an SNS event as plain text body (ex: "https://api.domain-name.com/mail-bounce-or-complaint"), containing the SES event in the "Message" field of SNSNotificationRequest. See the SESEventTypes and SNSEventsTypes pydantic classes in "aws_tools" package.'
+    Description: 'Ignored if an empty string is passed. The url at which a POST request is sent to on email event, with an SNS event as plain text body (ex: "https://api.domain-name.com/mail-bounce-or-complaint"), containing the SES event in the "Message" field of SNSNotificationRequest. See the SESEmailEvent and SNSEventsTypes pydantic classes in "aws_tools" package.'
     Default: ""
   EventsQueueArn:
     Type: String

@@ -286,10 +286,6 @@ class SESEmailEvent(_SESEvent):
     subscription: SubscriptionEvent | None = None
 
 
-SESEventTypes = Union[BounceEvent, ComplaintEvent, DeliveryEvent, SendEvent, RejectEvent, OpenEvent, ClickEvent, RenderingFailureEvent, DeliveryDelayEvent, SubscriptionEvent, SESEmailEvent]
-assert set(_SESEvent.__subclasses__()) == set(SESEventTypes.__args__)
-
-
 if __name__ == "__main__":
     import asyncio
     mail_from = "contact@sleek-simulations.com"
