@@ -3,7 +3,7 @@ This module was automatically generated from aws_tools.asynchrone.ecs
 """
 from aws_tools._async_tools import _run_async, _async_iter_to_sync, _sync_iter_to_async
 from typing import Iterable, Iterator
-from aws_tools.asynchrone.ecs import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, BaseModel, Field, get_session, Literal, Iterable, AsyncIterable, Optional, ClientError, session, TASK_STATUSES, Attribute, Attachment, NetworkInterface, NetworkBinding, ManagedAgent, ECSContainer, ECSContainerDescription, EnvironmentFile, ResourceRequirement, ECSContainerOverride, Overrides, ECSTaskStatus, _ECSTask, ECSTaskDetails, ECSTaskStateChangeEvent, StorageSize, Tag, ECSTaskDescription, run_fargate_task_async, stop_fargate_task_async, get_tasks_descriptions_async, get_task_description_async
+from aws_tools.asynchrone.ecs import __name__, __doc__, __package__, __loader__, __spec__, __file__, __cached__, __builtins__, datetime, BaseModel, Field, get_session, Literal, Iterable, AsyncIterable, Optional, ClientError, session, TASK_STATUSES, Attribute, Attachment, NetworkInterface, NetworkBinding, ManagedAgent, ECSContainer, EnvironmentFile, ResourceRequirement, ECSContainerOverride, Overrides, ECSTaskStatus, ECSTask, ECSTaskStateChangeEvent, StorageSize, Tag, ECSTaskDescription, run_fargate_task_async, stop_fargate_task_async, get_tasks_descriptions_async, get_task_description_async
 
 
 def get_tasks_descriptions(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> Iterable[ECSTaskDescription | None]:
@@ -28,7 +28,7 @@ def run_fargate_task(
         memory_MiB_override: int | None = None,
         disk_GiB_override: int | None = None,
         env_overrides: dict | None = None,
-    ) -> ECSTaskDescription:
+    ) -> ECSTask:
     """
     Run a standalone task on an ECS cluster.
     Returns the running task arn.

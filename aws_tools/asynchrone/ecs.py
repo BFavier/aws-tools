@@ -46,23 +46,20 @@ class ManagedAgent(BaseModel):
 
 class ECSContainer(BaseModel):
     containerArn: str
-    cpu: str
-    image: str | None = None
-    imageDigest: str
-    lastStatus: str
-    name: str
-    networkInterfaces: list[NetworkInterface]
-    runtimeId: str
     taskArn: str
-
-
-class ECSContainerDescription(ECSContainer):
-    exitCode: int
+    name: str
+    lastStatus: str
+    networkInterfaces: list[NetworkInterface]
+    cpu: str
+    memory: str | None = None
+    image: str | None = None
+    imageDigest: str | None = None
+    runtimeId: str | None = None
+    exitCode: int | None = None
+    networkBindings: list[NetworkBinding] | None = None
+    healthStatus: Literal["HEALTHY", "UNHEALTHY", "UNKNOWN"] | None = None
     reason: str | None = None
-    networkBindings: list[NetworkBinding]
-    healthStatus: Literal["HEALTHY", "UNHEALTHY", "UNKNOWN"]
     managedAgents: list[ManagedAgent] | None = None
-    memory: str
     memoryReservation: str | None = None
     gpuIds: list[str] | None = None
 
@@ -95,13 +92,11 @@ class Overrides(BaseModel):
 ECSTaskStatus = Literal["PROVISIONING", "PENDING", "ACTIVATING", "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED", "DELETED"]
 
 
-class _ECSTask(BaseModel):
+class ECSTask(BaseModel):
     attachments: list[Attachment]
     attributes: list[Attribute]
     availabilityZone: str
     clusterArn: str
-    connectivity: Literal["CONNECTED", "DISCONECTED"]
-    connectivityAt: datetime
     containerInstanceArn: str | None = None
     containers: list[ECSContainer]
     cpu: str
@@ -113,16 +108,15 @@ class _ECSTask(BaseModel):
     lastStatus: ECSTaskStatus
     memory: str
     overrides: dict
-    pullStartedAt: datetime
-    pullStoppedAt: datetime
-    startedAt: datetime
     taskArn: str
     taskDefinitionArn: str
     version: int
-
-
-class ECSTaskDetails(_ECSTask):
-    updatedAt: str
+    connectivity: Literal["CONNECTED", "DISCONECTED"] | None = None
+    connectivityAt: datetime | None = None
+    pullStartedAt: datetime | None = None
+    pullStoppedAt: datetime | None = None
+    startedAt: datetime | None = None
+    updatedAt: str | None = None
 
 
 class ECSTaskStateChangeEvent(BaseModel):
@@ -138,7 +132,7 @@ class ECSTaskStateChangeEvent(BaseModel):
     time: str
     region: str
     resources: list[str]
-    detail: ECSTaskDetails
+    detail: ECSTask
 
 
 class StorageSize(BaseModel):
@@ -150,12 +144,12 @@ class Tag(BaseModel):
     value: str
 
 
-class ECSTaskDescription(_ECSTask):
+class ECSTaskDescription(ECSTask):
     """
     The return type from boto3 ecs 'describe_tasks'
     https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/describe_tasks.html
     """
-    containers: list[ECSContainerDescription]
+    containers: list[ECSContainer]
     capacityProviderName: Literal["EC2", "FARGATE"] | None = None
     overrides: Overrides
     platformVersion: str
@@ -184,7 +178,7 @@ async def run_fargate_task_async(
         memory_MiB_override: int | None = None,
         disk_GiB_override: int | None = None,
         env_overrides: dict | None = None,
-    ) -> ECSTaskDescription:
+    ) -> ECSTask:
     """
     Run a standalone task on an ECS cluster.
     Returns the running task arn.
@@ -221,7 +215,7 @@ async def run_fargate_task_async(
         kwargs["overrides"] = overrides=overrides
     async with session.create_client("ecs") as ecs:
         response = await ecs.run_task(**kwargs)
-    return ECSTaskDescription(**response["tasks"][0])
+    return ECSTask(**response["tasks"][0])
 
 
 async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user") -> bool:
