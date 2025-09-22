@@ -6,6 +6,172 @@ from botocore.exceptions import ClientError
 session = get_session()
 
 
+TASK_STATUSES = Literal["PROVISIONING", "PENDING", "RUNNING", "DEPROVISIONING", "STOPPED", "ACTIVATING"]
+
+
+class Attribute(BaseModel):
+    name: str
+    value: str
+
+
+class Attachment(BaseModel):
+    id: str
+    type: Literal["eni", "Service Connect", "AmazonElasticBlockStorage"]
+    status: Literal["PRECREATED", "CREATED", "ATTACHING", "ATTACHED", "DETACHING", "DETACHED", "DELETED", "FAILED"]
+    details: list[Attribute]
+
+
+class NetworkInterface(BaseModel):
+    attachmentId: str
+    privateIpv4Address: str
+    ipv6Address: str | None = None
+
+
+class NetworkBinding(BaseModel):
+    bindIP: str
+    containerPort: int
+    hostPort: int
+    protocol: Literal["tcp", "udp"]
+    containerPortRange: str
+    hostPortRange: str
+
+
+class ManagedAgent(BaseModel):
+    lastStartedAt: str
+    name: str
+    reason: str
+    lastStatus: str
+
+
+class ECSContainer(BaseModel):
+    containerArn: str
+    cpu: str
+    image: str | None = None
+    imageDigest: str
+    lastStatus: str
+    name: str
+    networkInterfaces: list[NetworkInterface]
+    runtimeId: str
+    taskArn: str
+
+
+class ECSContainerDescription(ECSContainer):
+    exitCode: int
+    reason: str
+    networkBindings: list[NetworkBinding]
+    healthStatus: Literal["HEALTHY", "UNHEALTHY", "UNKNOWN"]
+    managedAgents: list[ManagedAgent]
+    memory: str
+    memoryReservation: str
+    gpuIds: list[str]
+
+
+class EnvironmentFile(BaseModel):
+    value: str
+    type: Literal["s3"]
+
+
+class ResourceRequirement(BaseModel):
+    value: str
+    type: Literal["GPU", "InferenceAccelerator"]
+
+
+class ECSContainerOverride(BaseModel):
+    name: str
+    command: list[str]
+    environment: list[Attribute]
+    environmentFiles: list[EnvironmentFile]
+    cpu: int
+    memory: int
+    memoryReservation: int
+    resourceRequirements: list[ResourceRequirement]
+
+
+class Overrides(BaseModel):
+    containerOverrides: list[ECSContainerOverride]
+
+
+ECSTaskStatus = Literal["PROVISIONING", "PENDING", "ACTIVATING", "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED", "DELETED"]
+
+
+class _ECSTask(BaseModel):
+    attachments: list[Attachment]
+    attributes: list[Attribute]
+    availabilityZone: str
+    capacityProviderName: Literal["EC2", "FARGATE"]
+    clusterArn: str
+    connectivity: Literal["CONNECTED", "DISCONECTED"]
+    connectivityAt: str
+    containerInstanceArn: str | None = None
+    containers: list[ECSContainer]
+    cpu: str
+    createdAt: str
+    desiredStatus: ECSTaskStatus
+    enableExecuteCommand: bool
+    group: str
+    launchType: Literal["EC2", "FARGATE"]
+    lastStatus: ECSTaskStatus
+    memory: str
+    overrides: dict
+    pullStartedAt: str
+    pullStoppedAt: str
+    startedAt: str
+    taskArn: str
+    taskDefinitionArn: str
+    version: int
+
+
+class ECSTaskDetails(_ECSTask):
+    updatedAt: str
+
+
+class ECSTaskStateChangeEvent(BaseModel):
+    """
+    Event on ECS task state change, as captured by event bridge
+    https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_task_events.html
+    """
+    version: str
+    id: str
+    detail_type: str = Field(..., alias="detail-type")
+    source: str
+    account: str
+    time: str
+    region: str
+    resources: list[str]
+    detail: ECSTaskDetails
+
+
+class StorageSize(BaseModel):
+    sizeInGiB: int
+
+
+class Tag(BaseModel):
+    key: str
+    value: str
+
+
+class ECSTaskDescription(_ECSTask):
+    """
+    The return type from boto3 ecs 'describe_tasks'
+    https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/describe_tasks.html
+    """
+    containers: list[ECSContainerDescription]
+    overrides: Overrides
+    platformVersion: str
+    platformFamily: str
+    startedBy: str
+    stopCode: Literal["TaskFailedToStart", "EssentialContainerExited", "UserInitiated", "ServiceSchedulerInitiated", "SpotInterruption", "TerminationNotice"]
+    stoppedAt: str
+    stoppedReason: str
+    stoppingAt: str
+    tags: list[Tag]
+    ephemeralStorage: StorageSize | None = None
+    fargateEphemeralStorage: StorageSize | None = None
+
+    def is_running(self):
+        return self.lastStatus in {"PROVISIONING", "PENDING", "ACTIVATING", "RUNNING"}
+
+
 async def run_fargate_task_async(
         cluster_name: str,
         task_definition: str,
@@ -17,7 +183,7 @@ async def run_fargate_task_async(
         memory_MiB_override: int | None = None,
         disk_GiB_override: int | None = None,
         env_overrides: dict | None = None,
-    ) -> dict:
+    ) -> ECSTaskDescription:
     """
     Run a standalone task on an ECS cluster.
     Returns the running task arn.
@@ -54,7 +220,7 @@ async def run_fargate_task_async(
         kwargs["overrides"] = overrides=overrides
     async with session.create_client("ecs") as ecs:
         response = await ecs.run_task(**kwargs)
-    return response["tasks"][0]
+    return ECSTaskDescription(**response["tasks"][0])
 
 
 async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user") -> bool:
@@ -78,7 +244,7 @@ async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str=
     return True
 
 
-async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[dict | None]:
+async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[ECSTaskDescription | None]:
     """
     Returns the description of the given tasks, by querying aws by batch. Yield None for non-existant tasks.
     """
@@ -86,115 +252,15 @@ async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[st
     async with session.create_client("ecs") as ecs:
         subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
         response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns, include=["TAGS"])
-        status = {task["taskArn"]: task for task in response["tasks"]}
+        descriptions = {task["taskArn"]: task for task in response["tasks"]}
         for arn in subset_arns:
-            yield status.get(arn)
+            desc = descriptions.get(arn)
+            if desc is not None:
+                desc = ECSTaskDescription(**desc)
+            yield desc
 
 
-TASK_STATUSES = Literal["PROVISIONING", "PENDING", "RUNNING", "DEPROVISIONING", "STOPPED", "ACTIVATING"]
-
-
-async def get_tasks_statuses_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[TASK_STATUSES | None]:
+async def get_task_description_async(cluster_name: str, task_arn: str) -> ECSTaskDescription | None:
     """
-    Returns whether the given tasks are running, by querying aws by batch
     """
-    async for description in get_tasks_descriptions_async(cluster_name=cluster_name, task_arns=task_arns, chunk_size=chunk_size):
-        if description is None:
-            yield None
-        else:
-            yield description["lastStatus"]
-
-
-async def task_is_running_async(cluster_name: str, task_arn: str) -> bool:
-    """
-    Returns whether the given taks is running
-    """
-    async for status in get_tasks_statuses_async(cluster_name, [task_arn]):
-        return status in {"PROVISIONING", "PENDING", "ACTIVATING", "RUNNING"}
-
-
-async def task_exists_async(cluster_name: str, task_arn: str) -> bool:
-    """
-    Returns whether the given task exists
-    """
-    async for status in get_tasks_statuses_async(cluster_name, [task_arn]):
-        return status is not None
-
-
-async def get_task_tags_async(cluster_name: str, task_arn: str) -> dict[str, str] | None:
-    """
-    Returns the tags of a task. Returns None if the task does not exists.
-    """
-    async for description in get_tasks_descriptions_async(cluster_name=cluster_name, task_arns=[task_arn]):
-        if description is None:
-            return None
-        else:
-            return {tag["key"]: tag["value"] for tag in description["tags"]}
-
-
-class Attribute(BaseModel):
-    name: str
-    value: str
-
-
-class NetworkInterface(BaseModel):
-    attachmentId: str
-    privateIpv4Address: str
-
-
-class ECSContainer(BaseModel):
-    containerArn: str
-    lastStatus: str
-    name: str
-    image: str | None = None
-    imageDigest: str
-    runtimeId: str
-    taskArn: str
-    networkInterfaces: list[NetworkInterface]
-    cpu: str
-
-
-ECSTaskStatus = Literal["PROVISIONING", "PENDING", "ACTIVATING", "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED", "DELETED"]
-
-
-class ECSTaskDetails(BaseModel):
-    attachments: list[dict]
-    attributes: list[Attribute]
-    availabilityZone: str
-    capacityProviderName: str
-    clusterArn: str
-    connectivity: str
-    connectivityAt: str
-    containerInstanceArn: str | None = None
-    containers: list[ECSContainer]
-    cpu: str
-    createdAt: str
-    desiredStatus: ECSTaskStatus
-    enableExecuteCommand: bool
-    group: str
-    launchType: Literal["EC2", "FARGATE"]
-    lastStatus: ECSTaskStatus
-    memory: str
-    overrides: dict
-    pullStartedAt: str
-    pullStoppedAt: str
-    startedAt: str
-    taskArn: str
-    taskDefinitionArn: str
-    updatedAt: str
-    version: int
-
-
-class ECSTaskStateChangeEvent(BaseModel):
-    """
-    Event on ECS task state change, as captured by event bridge
-    """
-    version: str
-    id: str
-    detail_type: str = Field(..., alias="detail-type")
-    source: str
-    account: str
-    time: str
-    region: str
-    resources: list[str]
-    detail: ECSTaskDetails
+    return next(iter(await get_tasks_descriptions_async(cluster_name, [task_arn])))
