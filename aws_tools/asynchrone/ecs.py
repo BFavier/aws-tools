@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, Field
 from aiobotocore.session import get_session
 from typing import Literal, Iterable, AsyncIterable, Optional
@@ -16,7 +17,7 @@ class Attribute(BaseModel):
 
 class Attachment(BaseModel):
     id: str
-    type: Literal["eni", "Service Connect", "AmazonElasticBlockStorage"]
+    type: Literal["ElasticNetworkInterface", "Service Connect", "AmazonElasticBlockStorage"] | str
     status: Literal["PRECREATED", "CREATED", "ATTACHING", "ATTACHED", "DETACHING", "DETACHED", "DELETED", "FAILED"]
     details: list[Attribute]
 
@@ -57,13 +58,13 @@ class ECSContainer(BaseModel):
 
 class ECSContainerDescription(ECSContainer):
     exitCode: int
-    reason: str
+    reason: str | None = None
     networkBindings: list[NetworkBinding]
     healthStatus: Literal["HEALTHY", "UNHEALTHY", "UNKNOWN"]
-    managedAgents: list[ManagedAgent]
+    managedAgents: list[ManagedAgent] | None = None
     memory: str
-    memoryReservation: str
-    gpuIds: list[str]
+    memoryReservation: str | None = None
+    gpuIds: list[str] | None = None
 
 
 class EnvironmentFile(BaseModel):
@@ -77,14 +78,14 @@ class ResourceRequirement(BaseModel):
 
 
 class ECSContainerOverride(BaseModel):
-    name: str
-    command: list[str]
-    environment: list[Attribute]
-    environmentFiles: list[EnvironmentFile]
-    cpu: int
-    memory: int
-    memoryReservation: int
-    resourceRequirements: list[ResourceRequirement]
+    name: str | None = None
+    cpu: int | None = None
+    memory: int | None = None
+    command: list[str] | None = None
+    environment: list[Attribute] | None = None
+    environmentFiles: list[EnvironmentFile] | None = None
+    memoryReservation: int | None = None
+    resourceRequirements: list[ResourceRequirement] | None = None
 
 
 class Overrides(BaseModel):
@@ -98,14 +99,13 @@ class _ECSTask(BaseModel):
     attachments: list[Attachment]
     attributes: list[Attribute]
     availabilityZone: str
-    capacityProviderName: Literal["EC2", "FARGATE"]
     clusterArn: str
     connectivity: Literal["CONNECTED", "DISCONECTED"]
-    connectivityAt: str
+    connectivityAt: datetime
     containerInstanceArn: str | None = None
     containers: list[ECSContainer]
     cpu: str
-    createdAt: str
+    createdAt: datetime
     desiredStatus: ECSTaskStatus
     enableExecuteCommand: bool
     group: str
@@ -113,9 +113,9 @@ class _ECSTask(BaseModel):
     lastStatus: ECSTaskStatus
     memory: str
     overrides: dict
-    pullStartedAt: str
-    pullStoppedAt: str
-    startedAt: str
+    pullStartedAt: datetime
+    pullStoppedAt: datetime
+    startedAt: datetime
     taskArn: str
     taskDefinitionArn: str
     version: int
@@ -156,14 +156,15 @@ class ECSTaskDescription(_ECSTask):
     https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/describe_tasks.html
     """
     containers: list[ECSContainerDescription]
+    capacityProviderName: Literal["EC2", "FARGATE"] | None = None
     overrides: Overrides
     platformVersion: str
     platformFamily: str
-    startedBy: str
+    startedBy: str | None = None
     stopCode: Literal["TaskFailedToStart", "EssentialContainerExited", "UserInitiated", "ServiceSchedulerInitiated", "SpotInterruption", "TerminationNotice"]
-    stoppedAt: str
+    stoppedAt: datetime
     stoppedReason: str
-    stoppingAt: str
+    stoppingAt: datetime
     tags: list[Tag]
     ephemeralStorage: StorageSize | None = None
     fargateEphemeralStorage: StorageSize | None = None
@@ -263,4 +264,5 @@ async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[st
 async def get_task_description_async(cluster_name: str, task_arn: str) -> ECSTaskDescription | None:
     """
     """
-    return next(iter(await get_tasks_descriptions_async(cluster_name, [task_arn])))
+    async for desc in get_tasks_descriptions_async(cluster_name, [task_arn]):
+        return desc

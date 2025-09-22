@@ -1,161 +1,138 @@
-
 {
     "attachments": [
         {
-            "id": "string",
-            "type": "eni",
-            "status": "CREATED",
+            "id": "27d1dc65-5da2-4dbf-a5df-fe9ebad05887",
+            "type": "ElasticNetworkInterface",
+            "status": "DELETED",
             "details": [
                 {
-                    "name": "string",
-                    "value": "string"
+                    "name": "subnetId",
+                    "value": "subnet-0a9ffca1e515eaa4d"
+                },
+                {
+                    "name": "networkInterfaceId",
+                    "value": "eni-098da88a3bfa15e35"
+                },
+                {
+                    "name": "macAddress",
+                    "value": "06:75:10:de:cb:8d"
+                },
+                {
+                    "name": "privateDnsName",
+                    "value": "ip-10-0-43-234.eu-west-1.compute.internal"
+                },
+                {
+                    "name": "privateIPv4Address",
+                    "value": "10.0.43.234"
                 }
             ]
         }
     ],
     "attributes": [
         {
-            "name": "string",
-            "value": "string",
-            "targetType": "container-instance",
-            "targetId": "string"
+            "name": "ecs.cpu-architecture",
+            "value": "x86_64"
         }
     ],
-    "availabilityZone": "string",
-    "capacityProviderName": "EC2",
-    "clusterArn": "string",
+    "availabilityZone": "eu-west-1c",
+    "clusterArn": "arn:aws:ecs:eu-west-1:717279735548:cluster/cluster-FargateCluster-1T5Q1GZT8NVRO-ECSCluster",
     "connectivity": "CONNECTED",
-    "connectivityAt": "2015-01-01",
-    "containerInstanceArn": "string",
+    "connectivityAt": "2025-09-22T20:34:24.401000+02:00",
+    "containerInstanceArn": null,
     "containers": [
         {
-            "containerArn": "string",
-            "taskArn": "string",
-            "name": "string",
-            "image": "string",
-            "imageDigest": "string",
-            "runtimeId": "string",
-            "lastStatus": "string",
-            "exitCode": 123,
-            "reason": "string",
-            "networkBindings": [
-                {
-                    "bindIP": "string",
-                    "containerPort": 123,
-                    "hostPort": 123,
-                    "protocol": "tcp",
-                    "containerPortRange": "string",
-                    "hostPortRange": "string"
-                }
-            ],
+            "containerArn": "arn:aws:ecs:eu-west-1:717279735548:container/cluster-FargateCluster-1T5Q1GZT8NVRO-ECSCluster/15ee2736c16743bdac442a75c358ba06/7ba08856-9207-452f-955f-b5e1ef9079bc",
+            "cpu": "256",
+            "image": "717279735548.dkr.ecr.eu-west-1.amazonaws.com/sleek-simulations/tasks/dummy:0",
+            "imageDigest": "sha256:91c5143beef7ecf3c65f29f71431b4ceada3c5a86b59c9a6a84a8962ab342456",
+            "lastStatus": "STOPPED",
+            "name": "DUMMY-TASK-V0",
             "networkInterfaces": [
                 {
-                    "attachmentId": "string",
-                    "privateIpv4Address": "string",
-                    "ipv6Address": "string"
+                    "attachmentId": "27d1dc65-5da2-4dbf-a5df-fe9ebad05887",
+                    "privateIpv4Address": "10.0.43.234",
+                    "ipv6Address": null
                 }
             ],
-            "healthStatus": "HEALTHY",
-            "managedAgents": [
-                {
-                    "lastStartedAt": "2015-01-01",
-                    "name": "ExecuteCommandAgent",
-                    "reason": "string",
-                    "lastStatus": "string"
-                }
-            ],
-            "cpu": "string",
-            "memory": "string",
-            "memoryReservation": "string",
-            "gpuIds": [
-                "string"
-            ]
+            "runtimeId": "15ee2736c16743bdac442a75c358ba06-3269713344",
+            "taskArn": "arn:aws:ecs:eu-west-1:717279735548:task/cluster-FargateCluster-1T5Q1GZT8NVRO-ECSCluster/15ee2736c16743bdac442a75c358ba06",
+            "exitCode": 1,
+            "reason": null,
+            "networkBindings": [],
+            "healthStatus": "UNKNOWN",
+            "managedAgents": null,
+            "memory": "512",
+            "memoryReservation": null,
+            "gpuIds": null
         }
     ],
-    "cpu": "string",
-    "createdAt": "2015-01-01",
-    "desiredStatus": "RUNNING",
-    "enableExecuteCommand": true,
-    "executionStoppedAt": "2015-01-01",
-    "group": "string",
-    "healthStatus": "HEALTHY",
-    "inferenceAccelerators": [
-        {
-            "deviceName": "string",
-            "deviceType": "string"
-        }
-    ],
-    "lastStatus": "RUNNING",
-    "launchType": "EC2",
-    "memory": "string",
+    "cpu": "256",
+    "createdAt": "2025-09-22T20:34:20.825000+02:00",
+    "desiredStatus": "STOPPED",
+    "enableExecuteCommand": false,
+    "group": "family:DUMMY-TASK-V0",
+    "launchType": "FARGATE",
+    "lastStatus": "STOPPED",
+    "memory": "512",
     "overrides": {
         "containerOverrides": [
             {
-                "name": "string",
-                "command": [
-                    "string"
-                ],
+                "name": "DUMMY-TASK-V0",
+                "cpu": 256,
+                "memory": 512,
+                "command": null,
                 "environment": [
                     {
-                        "name": "string",
-                        "value": "string"
+                        "name": "CONFIG_ID",
+                        "value": "OBJECT-aBOj4fgMy5U"
+                    },
+                    {
+                        "name": "ACCOUNT_ID",
+                        "value": "ACCOUNT-Bg2Vor8IDMs"
+                    },
+                    {
+                        "name": "TASK_ID",
+                        "value": "TASK-SVnK0jf8BmU"
                     }
                 ],
-                "environmentFiles": [
-                    {
-                        "value": "string",
-                        "type": "s3"
-                    }
-                ],
-                "cpu": 123,
-                "memory": 123,
-                "memoryReservation": 123,
-                "resourceRequirements": [
-                    {
-                        "value": "string",
-                        "type": "GPU"
-                    }
-                ]
+                "environmentFiles": null,
+                "memoryReservation": null,
+                "resourceRequirements": null
             }
-        ],
-        "cpu": "string",
-        "inferenceAcceleratorOverrides": [
-            {
-                "deviceName": "string",
-                "deviceType": "string"
-            }
-        ],
-        "executionRoleArn": "string",
-        "memory": "string",
-        "taskRoleArn": "string",
-        "ephemeralStorage": {
-            "sizeInGiB": 123
-        }
+        ]
     },
-    "platformVersion": "string",
-    "platformFamily": "string",
-    "pullStartedAt": "2015-01-01",
-    "pullStoppedAt": "2015-01-01",
-    "startedAt": "2015-01-01",
-    "startedBy": "string",
-    "stopCode": "TaskFailedToStart",
-    "stoppedAt": "2015-01-01",
-    "stoppedReason": "string",
-    "stoppingAt": "2015-01-01",
+    "pullStartedAt": "2025-09-22T20:34:37.500000+02:00",
+    "pullStoppedAt": "2025-09-22T20:34:45.487000+02:00",
+    "startedAt": "2025-09-22T20:34:45.694000+02:00",
+    "taskArn": "arn:aws:ecs:eu-west-1:717279735548:task/cluster-FargateCluster-1T5Q1GZT8NVRO-ECSCluster/15ee2736c16743bdac442a75c358ba06",
+    "taskDefinitionArn": "arn:aws:ecs:eu-west-1:717279735548:task-definition/DUMMY-TASK-V0:2",
+    "version": 5,
+    "capacityProviderName": null,
+    "platformVersion": "1.4.0",
+    "platformFamily": "Linux",
+    "startedBy": null,
+    "stopCode": "EssentialContainerExited",
+    "stoppedAt": "2025-09-22T20:35:20.775000+02:00",
+    "stoppedReason": "Essential container in task exited",
+    "stoppingAt": "2025-09-22T20:35:06.699000+02:00",
     "tags": [
         {
-            "key": "string",
-            "value": "string"
+            "key": "ACCOUNT_ID",
+            "value": "ACCOUNT-Bg2Vor8IDMs"
+        },
+        {
+            "key": "CONFIG_ID",
+            "value": "OBJECT-aBOj4fgMy5U"
+        },
+        {
+            "key": "TASK_ID",
+            "value": "TASK-SVnK0jf8BmU"
         }
     ],
-    "taskArn": "string",
-    "taskDefinitionArn": "string",
-    "version": 123,
     "ephemeralStorage": {
-        "sizeInGiB": 123
+        "sizeInGiB": 20
     },
     "fargateEphemeralStorage": {
-        "sizeInGiB": 123,
-        "kmsKeyId": "string"
+        "sizeInGiB": 20
     }
 }
