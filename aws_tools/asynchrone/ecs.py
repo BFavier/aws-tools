@@ -12,7 +12,7 @@ TASK_STATUSES = Literal["PROVISIONING", "PENDING", "RUNNING", "DEPROVISIONING", 
 
 class Attribute(BaseModel):
     name: str
-    value: str
+    value: str | None = None
 
 
 class Attachment(BaseModel):
@@ -24,7 +24,7 @@ class Attachment(BaseModel):
 
 class NetworkInterface(BaseModel):
     attachmentId: str
-    privateIpv4Address: str
+    privateIpv4Address: str | None = None
     ipv6Address: str | None = None
 
 
