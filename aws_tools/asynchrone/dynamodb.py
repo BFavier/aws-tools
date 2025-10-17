@@ -1,5 +1,6 @@
 import typing
 import boto3
+import asyncio
 import aioboto3
 from operator import __and__
 from typing import Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator
@@ -17,6 +18,50 @@ KeyType = dict[Literal["HASH", "RANGE"], object]
 
 class DynamoDBException(Exception):
     pass
+
+
+class DynamoDBManager:
+    """
+    A resource manager that initalizes dynamodb resources
+    >>> ddb = DynamoDBManager()
+    ...
+    >>> ddb_async = await DynamoDBManager()
+    """
+
+    def __init__(self):
+        self.session = boto3.Session()
+        self.dynamodb_resource = self.session.resource()
+        self._tables = dict()
+        self.is_async = False
+
+    async def __await__(self) -> "DynamoDBManager":
+        self.session = aioboto3.Session()
+        self.resource = await self.session.resource("dynamodb").__aenter__()
+        self.is_async = True
+        return self
+
+    def __del__(self):
+        if self.is_async:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self._unload())
+
+    async def _unload(self):
+        await self.resource.__aexit__(None, None, None)
+    
+    def _get_table(name: str) -> object:
+        """
+        """
+
+
+class DynamoDBTable:
+    """
+    """
+
+    def __init__(self, ddb: DynamoDBManager, name: str):
+        ...
+    
+    async def _init_async(self):
+        ...
 
 
 def _recursive_convert(item: object, to_decimal: bool, n_decimals: int=9) -> object:
