@@ -110,7 +110,7 @@ class DynamoDBTest(unittest.TestCase):
         """
         # test missing items behaviour
         assert scan_items(self.table_name)[0] == []
-        assert query_items(self.table_name, hash_key=self.item_id["id"])[0] == []
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None)[0] == []
         # create the item
         put_item(self.table_name, self.item, overwrite=False)
         assert get_item(self.table_name, self.item_id)["event_time"] == "23h30"
@@ -121,18 +121,18 @@ class DynamoDBTest(unittest.TestCase):
         assert all(v in (self.another_item, self.item) for v in scan_items(self.table_name)[0])
         assert all(v in (self.another_item, self.item) for v in scan_all_items(self.table_name, conditions=Attr("field").eq(Decimal(10.0))))
         # query with hash key only
-        assert all(v in (self.another_item, self.item) for v in query_items(self.table_name, hash_key=self.item_id["id"])[0])
+        assert all(v in (self.another_item, self.item) for v in query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None)[0])
         assert all(v in (self.another_item, self.item) for v in query_all_items(self.table_name, hash_key=self.item_id["id"]))
         # query with hash and sort key
-        assert query_items(self.table_name, hash_key=self.item_id["id"], sort_key_filter="23")[0] == [self.item]
-        assert query_items(self.table_name, hash_key=self.item_id["id"], sort_key_filter=(None, "21h00"))[0] == [self.another_item]
-        assert query_items(self.table_name, hash_key=self.item_id["id"], sort_key_filter=("23h30", None))[0] == [self.item]
-        assert query_items(self.table_name, hash_key=self.item_id["id"], sort_key_filter=("21h00", "23h30"))[0] == [self.another_item, self.item]
-        assert query_items(self.table_name, hash_key=self.item_id["id"], sort_key_filter=("21h00", "23h30"), ascending=False)[0] == [self.item, self.another_item]
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None, sort_key_filter="23")[0] == [self.item]
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None, sort_key_filter=(None, "21h00"))[0] == [self.another_item]
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None, sort_key_filter=("23h30", None))[0] == [self.item]
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None, sort_key_filter=("21h00", "23h30"))[0] == [self.another_item, self.item]
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None, sort_key_filter=("21h00", "23h30"), ascending=False)[0] == [self.item, self.another_item]
         # scan with conditions
         assert scan_items(self.table_name, conditions=Attr("field").eq(Decimal(10.0)) & Attr("some_field").eq("ok"))[0] == [self.item]
         # query with conditions
-        assert query_items(self.table_name, hash_key=self.item_id["id"], sort_key_filter=("21h00", "23h30"), conditions=Attr("field").eq(Decimal(10.0)))[0] == [self.item]
+        assert query_items(self.table_name, hash_key=self.item_id["id"], page_start_token=None, sort_key_filter=("21h00", "23h30"), conditions=Attr("field").eq(Decimal(10.0)))[0] == [self.item]
 
     def test_update_item(self):
         """
