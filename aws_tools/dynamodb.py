@@ -21,16 +21,16 @@ class DynamoDBException(Exception):
     pass
 
 
-class AsyncDynamoDBConnector:
+class DynamoDBConnector:
     """
     A dynamodb connector that initalizes dynamodb resources
-    >>> ddb = AsyncDynamoDBConnector()
+    >>> ddb = DynamoDBConnector()
     >>> await ddb.open()
     >>> ...
     >>> await ddb.close()
 
     It can also be used as an async context
-    >>> async with AsyncDynamoDBConnector() as ddb:
+    >>> async with DynamoDBConnector() as ddb:
     >>>     ...
     """
 
@@ -81,7 +81,7 @@ class AsyncDynamoDBConnector:
 
 
 async def create_table_async(
-        ddb: AsyncDynamoDBConnector,
+        ddb: DynamoDBConnector,
         table_name: str,
         partition_names: dict[Literal["HASH", "RANGE"], str],
         data_types: dict[str, Literal["S", "N", "B"]],
@@ -131,7 +131,7 @@ async def create_table_async(
             raise RuntimeError(f"Failed to enable TTL: {e}")
 
 
-async def delete_table_async(ddb: AsyncDynamoDBConnector, table_name: str, blocking: bool=True):
+async def delete_table_async(ddb: DynamoDBConnector, table_name: str, blocking: bool=True):
     """
     Delete a table, raise an error if it does not exists
 
@@ -152,14 +152,14 @@ async def delete_table_async(ddb: AsyncDynamoDBConnector, table_name: str, block
             raise
 
 
-async def list_table_names_async(ddb: AsyncDynamoDBConnector) -> list[str]:
+async def list_table_names_async(ddb: DynamoDBConnector) -> list[str]:
     """
     list existing tables
     """
     return [table.name async for table in ddb.dynamodb.tables.all()]
 
 
-async def table_exists_async(ddb: AsyncDynamoDBConnector, table_name: str) -> bool:
+async def table_exists_async(ddb: DynamoDBConnector, table_name: str) -> bool:
     """
     Returns True if the table exists and False otherwise
     """
@@ -173,11 +173,11 @@ async def table_exists_async(ddb: AsyncDynamoDBConnector, table_name: str) -> bo
 
 class Table(Awaitable["Table"]):
     """
-    >>> async with AsyncDynamoDBConnector as ddb:
+    >>> async with DynamoDBConnector as ddb:
     >>>     table = await Table(ddb, "test-table")
     """
 
-    def __init__(self, ddb: AsyncDynamoDBConnector, name: str):
+    def __init__(self, ddb: DynamoDBConnector, name: str):
         self.name = name
         self._ddb = ddb
         self._ddb_table = None
