@@ -1,10 +1,8 @@
 import unittest
+import asyncio
 from uuid import uuid4
 from decimal import Decimal
-from aws_tools.synchrone.dynamodb import list_tables, get_table_keys, table_exists, create_table, delete_table
-from aws_tools.synchrone.dynamodb import item_exists, get_item, batch_get_items, put_item, batch_put_items, delete_item, batch_delete_items, update_item, get_item_fields
-from aws_tools.synchrone.dynamodb import scan_items, query_items, scan_all_items, query_all_items, Attr, Decimal
-from aws_tools.synchrone.dynamodb import DynamoDBException
+from aws_tools.dynamodb import Attr, Decimal, DynamoDBException, AsyncDynamoDBConnector, AsyncTableConnector, list_table_names_async, table_exists_async, create_table_async, delete_table_async
 from aws_tools._check_fail_context import check_fail
 
 
@@ -16,7 +14,7 @@ class DynamoDBTest(unittest.TestCase):
         create a table and define items
         """
         cls.table_name = "unit-test-"+str(uuid4())
-        create_table(cls.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
+        asyncio.run(create_table_async(cls.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"}))
         cls.item_id = {"id": str(uuid4()), "event_time": "23h30"}
         cls.item = {**cls.item_id, "field": 10.0, "some_field": "ok", "other_field": True}
         cls.new_item = {**cls.item_id, "field": -1.0, "array_field": [{"nested": 10.0}], "set_field": {"a", "b", "c"}}
@@ -32,7 +30,7 @@ class DynamoDBTest(unittest.TestCase):
         Delete the table if it was not done already
         """
         try:
-            delete_table(cls.table_name)
+            asyncio.run(delete_table_async(cls.table_name))
         except DynamoDBException:
             pass
     
@@ -46,19 +44,26 @@ class DynamoDBTest(unittest.TestCase):
         """
         After each test case, delete all items
         """
-        if table_exists(self.table_name):
-            items, _ = scan_items(self.table_name)
-            batch_delete_items(self.table_name, items)
+        async def cleanup():
+            ddb = await AsyncDynamoDBConnector()
+            try:
+                table = AsyncTableConnector(ddb, self.table_name)
+            except DynamoDBException:
+                pass
+            else:
+                await table.batch_delete_items_async(table.scan_all_items_async())
 
     def test_table_api(self):
         """
         Test basic table creation and listing
         """
-        assert self.table_name in list_tables()
-        assert table_exists(self.table_name)
-        assert not table_exists("unknown_table")
-        with check_fail(DynamoDBException):
-            create_table(self.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
+        async def test():
+            ddb = await AsyncDynamoDBConnector()
+            assert self.table_name in await list_table_names_async(ddb)
+            assert await table_exists_async(ddb, self.table_name)
+            assert not await table_exists_async(ddb, "unknown_table")
+            with check_fail(DynamoDBException):
+                await create_table_async(ddb, self.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
 
     def test_table_deletion(self):
         """

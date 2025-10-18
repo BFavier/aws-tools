@@ -24,7 +24,7 @@ class DynamoDBException(Exception):
 class AsyncDynamoDBConnector:
     """
     A dynamodb connector that initalizes dynamodb resources
-    >>> addb = await AsyncDynamoDBConnector()
+    >>> ddb = await AsyncDynamoDBConnector()
     """
 
     def __init__(self):
@@ -52,7 +52,7 @@ class AsyncDynamoDBConnector:
 
 
 async def create_table_async(
-        addb: AsyncDynamoDBConnector,
+        ddb: AsyncDynamoDBConnector,
         table_name: str,
         partition_names: dict[Literal["HASH", "RANGE"], str],
         data_types: dict[str, Literal["S", "N", "B"]],
@@ -66,7 +66,7 @@ async def create_table_async(
     >>> table = create_table("test-table")
     """
     try:
-        table = await addb.dynamodb.create_table(
+        table = await ddb.dynamodb.create_table(
             TableName=table_name,
             KeySchema=[
                 {
@@ -91,7 +91,7 @@ async def create_table_async(
             raise
     if ttl_attribute:
         try:
-            await addb.dynamodb.update_time_to_live(
+            await ddb.dynamodb.update_time_to_live(
                 TableName=table_name,
                 TimeToLiveSpecification={
                     "Enabled": True,
@@ -102,7 +102,7 @@ async def create_table_async(
             raise RuntimeError(f"Failed to enable TTL: {e}")
 
 
-async def delete_table_async(addb: AsyncDynamoDBConnector, table_name: str, blocking: bool=True):
+async def delete_table_async(ddb: AsyncDynamoDBConnector, table_name: str, blocking: bool=True):
     """
     Delete a table, raise an error if it does not exists
 
@@ -110,7 +110,7 @@ async def delete_table_async(addb: AsyncDynamoDBConnector, table_name: str, bloc
     -------
     >>> table = delete_table("test_table")
     """
-    con = await AsyncTableConnector(table_name, addb)
+    con = await AsyncTableConnector(table_name, ddb)
     try:
         await con.table.delete()
         # Wait until the table is correctly deleted before continuing
@@ -123,19 +123,19 @@ async def delete_table_async(addb: AsyncDynamoDBConnector, table_name: str, bloc
             raise
 
 
-async def list_table_names_async(addb: AsyncDynamoDBConnector) -> list[str]:
+async def list_table_names_async(ddb: AsyncDynamoDBConnector) -> list[str]:
     """
     list existing tables
     """
-    return [table.name async for table in addb.dynamodb.tables.all()]
+    return [table.name async for table in ddb.dynamodb.tables.all()]
 
 
-async def table_exists_async(addb: AsyncDynamoDBConnector, table_name: str) -> bool:
+async def table_exists_async(ddb: AsyncDynamoDBConnector, table_name: str) -> bool:
     """
     Returns True if the table exists and False otherwise
     """
     try:
-        table = await AsyncTableConnector(addb, table_name)
+        table = await AsyncTableConnector(ddb, table_name)
     except DynamoDBException:
         return False
     else:
@@ -144,17 +144,17 @@ async def table_exists_async(addb: AsyncDynamoDBConnector, table_name: str) -> b
 
 class AsyncTableConnector:
     """
-    >>> atc = await AsyncTableConnector("test-table", addb)
+    >>> atc = await AsyncTableConnector("test-table", ddb)
     """
 
-    def __init__(self, addb: AsyncDynamoDBConnector, name: str, ):
+    def __init__(self, ddb: AsyncDynamoDBConnector, name: str, ):
         self.name = name
-        self._addb = addb
+        self._ddb = ddb
         self._ddb_table = None
         self._keys = None
 
     async def __await__(self) -> "AsyncTableConnector":
-        self._ddb_table = await self._addb.resource.Table(self.name)
+        self._ddb_table = await self._ddb.resource.Table(self.name)
         try:
             await self._ddb_table.load()
         except ClientError as e:
@@ -356,7 +356,7 @@ class AsyncTableConnector:
             processed_items = {}
             unprocessed_keys = [{k: serializer.serialize(v) for k, v in key.items()} for key in chunk_keys]
             while len(unprocessed_keys) > 0:
-                response = await self._addb.dynamodb_client.batch_get_item(RequestItems={self.name: {"Keys": unprocessed_keys, "ConsistentRead": consistent_read}})
+                response = await self._ddb.dynamodb_client.batch_get_item(RequestItems={self.name: {"Keys": unprocessed_keys, "ConsistentRead": consistent_read}})
                 processed_items.update(
                     {
                         tuple(deserializer.deserialize(item[k]) for k in self.keys.values()) : {kk: deserializer.deserialize(vv) for kk, vv in item.items()}
