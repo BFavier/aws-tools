@@ -58,6 +58,7 @@ class DynamoDBTest(unittest.TestCase):
                     pass
                 else:
                     await table.batch_delete_items_async(table.scan_all_items_async())
+        asyncio.run(cleanup())
 
     def test_table_api(self):
         """
@@ -141,10 +142,10 @@ class DynamoDBTest(unittest.TestCase):
                 assert table.keys["RANGE"] == "event_time"  # event time is the sort key
                 # scan all items
                 assert all(v in (self.another_item, self.item) for v in (await table.scan_items_async())[0])
-                assert all(v in (self.another_item, self.item) async for v in table.scan_all_items_async(conditions=Attr("field").eq(Decimal(10.0))))
+                assert all(v in (self.another_item, self.item) for v in [v async for v in table.scan_all_items_async(conditions=Attr("field").eq(Decimal(10.0)))])
                 # query with hash key only
                 assert all(v in (self.another_item, self.item) for v in (await table.query_items_async(hash_key=self.item_id["id"], page_start_token=None))[0])
-                assert all(v in (self.another_item, self.item) async for v in table.query_all_items_async(hash_key=self.item_id["id"]))
+                assert all(v in (self.another_item, self.item) for v in [v async for v in table.query_all_items_async(hash_key=self.item_id["id"])])
                 # query with hash and sort key
                 assert (await table.query_items_async(hash_key=self.item_id["id"], page_start_token=None, sort_key_filter="23"))[0] == [self.item]
                 assert (await table.query_items_async(hash_key=self.item_id["id"], page_start_token=None, sort_key_filter=(None, "21h00")))[0] == [self.another_item]
