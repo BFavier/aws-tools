@@ -3,7 +3,7 @@ import boto3
 import asyncio
 import aioboto3
 from operator import __and__
-from typing import Type, Union, Literal, Iterable, AsyncIterable, AsyncGenerator
+from typing import Self, Literal, Iterable, AsyncIterable, AsyncGenerator, Generator, Awaitable, Any
 from collections.abc import Iterable as IterableABC, AsyncIterable as AsyncIterableABC
 from decimal import Decimal
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
@@ -24,31 +24,60 @@ class DynamoDBException(Exception):
 class AsyncDynamoDBConnector:
     """
     A dynamodb connector that initalizes dynamodb resources
-    >>> ddb = await AsyncDynamoDBConnector()
+    >>> ddb = AsyncDynamoDBConnector()
+    >>> await ddb.open()
+    >>> ...
+    >>> await ddb.close()
+
+    It can also be used as an async context
+    >>> async with AsyncDynamoDBConnector() as ddb:
+    >>>     ...
     """
 
     def __init__(self):
-        self.session = None
-        self.dynamodb = None
-        self.dynamodb_client = None
+        self._session = None
+        self._dynamodb = None
+        self._dynamodb_client = None
 
-    async def __await__(self) -> "AsyncDynamoDBConnector":
-        self.session = aioboto3.Session()
-        self.dynamodb = await self.session.resource("dynamodb").__aenter__()
-        self.dynamodb_client = await self.session.client("dynamodb").__aenter__()
+    async def open(self) -> Self:
+        self._session = aioboto3.Session()
+        self._dynamodb = await self._session.resource("dynamodb").__aenter__()
+        self._dynamodb_client = await self._session.client("dynamodb").__aenter__()
         return self
 
-    def __del__(self):
-        try:
-            loop = asyncio.get_event_loop()
-        except:
-            pass
-        else:
-            loop.run_until_complete(self._unload())
-
-    async def _unload(self):
+    async def close(self):
         await self.dynamodb.__aexit__(None, None, None)
         await self.dynamodb_client.__aexit__(None, None, None)
+
+    async def __aenter__(self) -> Self:
+        return await self.open()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+    
+    def _raise_not_initialized(self):
+        raise RuntimeError(f"{type(self).__name__} object was not awaited on creation, and as such, is not initialized")
+    
+    @property
+    def session(self) -> aioboto3.Session:
+        if self._session is None:
+            self._raise_not_initialized()
+        else:
+            return self._session
+
+    @property
+    def dynamodb(self) -> object:
+        if self._dynamodb is None:
+            self._raise_not_initialized()
+        else:
+            return self._dynamodb
+
+    @property
+    def dynamodb_client(self) -> object:
+        if self._dynamodb_client is None:
+            self._raise_not_initialized()
+        else:
+            return self._dynamodb_client
 
 
 async def create_table_async(
@@ -110,7 +139,7 @@ async def delete_table_async(ddb: AsyncDynamoDBConnector, table_name: str, block
     -------
     >>> table = delete_table("test_table")
     """
-    con = await AsyncTableConnector(table_name, ddb)
+    con = await Table(ddb, table_name)
     try:
         await con.table.delete()
         # Wait until the table is correctly deleted before continuing
@@ -135,26 +164,30 @@ async def table_exists_async(ddb: AsyncDynamoDBConnector, table_name: str) -> bo
     Returns True if the table exists and False otherwise
     """
     try:
-        table = await AsyncTableConnector(ddb, table_name)
+        table = await Table(ddb, table_name)
     except DynamoDBException:
         return False
     else:
         return True
 
 
-class AsyncTableConnector:
+class Table(Awaitable["Table"]):
     """
-    >>> atc = await AsyncTableConnector("test-table", ddb)
+    >>> async with AsyncDynamoDBConnector as ddb:
+    >>>     table = await Table(ddb, "test-table")
     """
 
-    def __init__(self, ddb: AsyncDynamoDBConnector, name: str, ):
+    def __init__(self, ddb: AsyncDynamoDBConnector, name: str):
         self.name = name
         self._ddb = ddb
         self._ddb_table = None
         self._keys = None
 
-    async def __await__(self) -> "AsyncTableConnector":
-        self._ddb_table = await self._ddb.resource.Table(self.name)
+    def __await__(self) -> Generator[Any, None, "Table"]:
+        return self._inititialize().__await__()
+
+    async def _inititialize(self) -> "Table":
+        self._ddb_table = await self._ddb.dynamodb.Table(self.name)
         try:
             await self._ddb_table.load()
         except ClientError as e:
