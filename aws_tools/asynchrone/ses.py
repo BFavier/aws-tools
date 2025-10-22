@@ -284,14 +284,3 @@ class SESEmailEvent(_SESEvent):
     failure: RenderingFailureEvent | None = None
     deliveryDelay: DeliveryDelayEvent | None = None
     subscription: SubscriptionEvent | None = None
-
-
-if __name__ == "__main__":
-    import asyncio
-    mail_from = "contact@sleek-simulations.com"
-    mail_to = "benoitfamillefavier@gmail.com"
-    # asyncio.run(send_email_async(mail_from, [mail_to], subject="Test non-raw email", body="ok"))
-    # send_raw_email(mail_from, recipient_emails=[mail_to], subject="raw email without attachment", text="ok", html="<p>ok</p>")
-    asyncio.run(send_raw_email_async(mail_from, recipient_emails=[mail_to], subject="Hello Benoit", html="<p>Hello !</p>", attachments={"file.txt": "ok"}))
-    # send_raw_email(mail_from, recipient_emails=[mail_to], subject="raw email without attachment and text only", text="ok")
-    # send_raw_email(mail_from, recipient_emails=[mail_to], subject="raw email with attachment", text="ok", html="<p>ok</p>")
