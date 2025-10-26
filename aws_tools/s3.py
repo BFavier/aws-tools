@@ -391,6 +391,7 @@ class S3:
         )
 
 
+    @staticmethod
     def s3_uri_to_bucket_and_key(self, s3_uri: str) -> tuple[str, str]:
         """
         Splits an "s3://bucket-name/s3/path" uri into a ("bucket-name", "s3/path") tuple of str
