@@ -195,6 +195,13 @@ class ElasticContainerService:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
 
+    @property
+    def client(self) -> AioBaseClient:
+        if self._client is None:
+            raise RuntimeError(f"{type(self).__name__} object is not initialized")
+        else:
+            return self._client
+
     async def run_fargate_task_async(
             self,
             cluster_name: str,

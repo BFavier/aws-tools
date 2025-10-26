@@ -43,6 +43,13 @@ class SimpleEmailingService:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
 
+    @property
+    def client(self) -> object:
+        if self._client is None:
+            raise RuntimeError(f"{type(self).__name__} object is not initialized")
+        else:
+            return self._client
+
     async def send_email_async(
             self,
             sender_email: str,
