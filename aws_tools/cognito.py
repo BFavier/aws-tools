@@ -20,7 +20,7 @@ class Cognito:
         self._client: AioBaseClient | None = None
 
     async def open(self):
-        self._client = await self.session.create_client("self.client-idp").__aenter__()
+        self._client = await self.session.create_client("cognito-idp").__aenter__()
 
     async def close(self):
         await self._client.__aexit__(None, None, None)
@@ -39,6 +39,37 @@ class Cognito:
             raise RuntimeError(f"{type(self).__name__} object is not initialized")
         else:
             return self._client
+
+    async def create_user_pool_async(self, pool_name: str) -> str:
+        """
+        Create an user pool
+        """
+        user_pool_response = await self.client.create_user_pool(
+            PoolName=pool_name,
+        )
+        return user_pool_response['UserPool']['Id']
+
+    async def create_user_pool_client_async(self, pool_id: str, pool_client_name: str) -> str:
+        """
+        Create an user pool client
+        """
+        user_pool_client_response = await self.client.create_user_pool_client(
+            UserPoolId=pool_id,
+            ClientName=pool_client_name,
+            GenerateSecret=False
+        )
+        return user_pool_client_response['UserPoolClient']['ClientId']
+
+    async def delete_user_pool_client_async(self, pool_id: str, pool_client_id: str):
+        await self.client.delete_user_pool_client(
+            UserPoolId=pool_id,
+            ClientId=pool_client_id
+        )
+
+    async def delete_user_pool_async(self, pool_id: str):
+        await self.client.delete_user_pool(
+            UserPoolId=pool_id
+        )
 
 
     async def login_async(self, pool_client: str, user: str, password: str) -> dict:
