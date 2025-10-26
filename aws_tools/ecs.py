@@ -1,10 +1,8 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
-from aiobotocore.session import get_session
+from aiobotocore.session import get_session, AioBaseClient
 from typing import Literal, Iterable, AsyncIterable, Optional
 from botocore.exceptions import ClientError
-
-session = get_session()
 
 
 TASK_STATUSES = Literal["PROVISIONING", "PENDING", "RUNNING", "DEPROVISIONING", "STOPPED", "ACTIVATING"]
@@ -167,65 +165,94 @@ class ECSTaskDescription(ECSTask):
         return self.lastStatus in {"PROVISIONING", "PENDING", "ACTIVATING", "RUNNING"}
 
 
-async def run_fargate_task_async(
-        cluster_name: str,
-        task_definition: str,
-        subnet_ids : list[str],
-        security_group_arn: str,
-        fargate_platform_version: str = "LATEST",
-        tags: dict = {},
-        vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
-        memory_MiB_override: int | None = None,
-        disk_GiB_override: int | None = None,
-        env_overrides: dict | None = None,
-    ) -> ECSTask:
+class ElasticContainerService:
     """
-    Run a standalone task on an ECS cluster.
-    Returns the running task arn.
+    >>> ecs = ElasticContainerService()
+    >>> await ecs.open()
+    >>> ...
+    >>> await ecs.close()
+
+    It can also be used as an async context
+    >>> async with ElasticContainerService() as ecs:
+    >>>     ...
     """
-    assert (disk_GiB_override is None) or (20 <= disk_GiB_override <= 200)
-    container_overrides = {
-        "name": task_definition,
-        "cpu": int(float(vCPU_override) * 1024) if vCPU_override is not None else None,
-        "memory": memory_MiB_override,
-        "environment": [{"name": k, "value": v} for k, v in env_overrides.items()] if env_overrides is not None else None
-    }
-    container_overrides = {k : v for k, v in container_overrides.items() if v is not None}
-    overrides = {}
-    if disk_GiB_override > 20:
-        overrides["ephemeralStorage"] = {"sizeInGiB": disk_GiB_override}
-    if len(container_overrides.keys()) > 1:
-        overrides["containerOverrides"] = [container_overrides]
-    kwargs = dict(
-        cluster=cluster_name,
-        taskDefinition=task_definition,
-        launchType="FARGATE",
-        platformVersion=fargate_platform_version,
-        networkConfiguration={
-            "awsvpcConfiguration":
-            {
-                "subnets": subnet_ids,
-                "securityGroups": [security_group_arn],
-                "assignPublicIp": "ENABLED"
-            }
-        },
-        tags=[{"key": k, "value": v} for k, v in tags.items()]
-    )
-    if len(overrides.keys()) > 0:
-        kwargs["overrides"] = overrides=overrides
-    async with session.create_client("ecs") as ecs:
-        response = await ecs.run_task(**kwargs)
-    return ECSTask(**response["tasks"][0])
+
+    def __init__(self):
+        self.session = get_session()
+        self._client: AioBaseClient | None = None
+
+    async def open(self):
+        self._client = await self.session.create_client("ecs").__aenter__()
+
+    async def close(self):
+        await self._client.__aexit__(None, None, None)
+        self._client = None
+
+    async def __aenter__(self) -> "ElasticContainerService":
+        await self.open()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
+    async def run_fargate_task_async(
+            self,
+            cluster_name: str,
+            task_definition: str,
+            subnet_ids : list[str],
+            security_group_arn: str,
+            fargate_platform_version: str = "LATEST",
+            tags: dict = {},
+            vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
+            memory_MiB_override: int | None = None,
+            disk_GiB_override: int | None = None,
+            env_overrides: dict | None = None,
+        ) -> ECSTask:
+        """
+        Run a standalone task on an ECS cluster.
+        Returns the running task arn.
+        """
+        assert (disk_GiB_override is None) or (20 <= disk_GiB_override <= 200)
+        container_overrides = {
+            "name": task_definition,
+            "cpu": int(float(vCPU_override) * 1024) if vCPU_override is not None else None,
+            "memory": memory_MiB_override,
+            "environment": [{"name": k, "value": v} for k, v in env_overrides.items()] if env_overrides is not None else None
+        }
+        container_overrides = {k : v for k, v in container_overrides.items() if v is not None}
+        overrides = {}
+        if disk_GiB_override > 20:
+            overrides["ephemeralStorage"] = {"sizeInGiB": disk_GiB_override}
+        if len(container_overrides.keys()) > 1:
+            overrides["containerOverrides"] = [container_overrides]
+        kwargs = dict(
+            cluster=cluster_name,
+            taskDefinition=task_definition,
+            launchType="FARGATE",
+            platformVersion=fargate_platform_version,
+            networkConfiguration={
+                "awsvpcConfiguration":
+                {
+                    "subnets": subnet_ids,
+                    "securityGroups": [security_group_arn],
+                    "assignPublicIp": "ENABLED"
+                }
+            },
+            tags=[{"key": k, "value": v} for k, v in tags.items()]
+        )
+        if len(overrides.keys()) > 0:
+            kwargs["overrides"] = overrides=overrides
+        response = await self.client.run_task(**kwargs)
+        return ECSTask(**response["tasks"][0])
 
 
-async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str="Stopped by user") -> bool:
-    """
-    Stops a running ECS Fargate task.
-    If the task did not exist, returns False.
-    """
-    async with session.create_client("ecs") as ecs:
+    async def stop_fargate_task_async(self, cluster_name: str, task_arn: str, reason: str="Stopped by user") -> bool:
+        """
+        Stops a running ECS Fargate task.
+        If the task did not exist, returns False.
+        """
         try:
-            await ecs.stop_task(
+            await self.client.stop_task(
                 cluster=cluster_name,
                 task=task_arn,
                 reason=reason
@@ -236,17 +263,16 @@ async def stop_fargate_task_async(cluster_name: str, task_arn: str, reason: str=
                 return False
             else:
                 raise
-    return True
+        return True
 
 
-async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[ECSTaskDescription | None]:
-    """
-    Returns the description of the given tasks, by querying aws by batch. Yield None for non-existant tasks.
-    """
-    iterable = (arn for arn in task_arns)
-    async with session.create_client("ecs") as ecs:
+    async def get_tasks_descriptions_async(self, cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[ECSTaskDescription | None]:
+        """
+        Returns the description of the given tasks, by querying aws by batch. Yield None for non-existant tasks.
+        """
+        iterable = (arn for arn in task_arns)
         subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
-        response = await ecs.describe_tasks(cluster=cluster_name, tasks=subset_arns, include=["TAGS"])
+        response = await self.client.describe_tasks(cluster=cluster_name, tasks=subset_arns, include=["TAGS"])
         descriptions = {task["taskArn"]: task for task in response["tasks"]}
         for arn in subset_arns:
             desc = descriptions.get(arn)
@@ -255,8 +281,8 @@ async def get_tasks_descriptions_async(cluster_name: str, task_arns: Iterable[st
             yield desc
 
 
-async def get_task_description_async(cluster_name: str, task_arn: str) -> ECSTaskDescription | None:
-    """
-    """
-    async for desc in get_tasks_descriptions_async(cluster_name, [task_arn]):
-        return desc
+    async def get_task_description_async(self, cluster_name: str, task_arn: str) -> ECSTaskDescription | None:
+        """
+        """
+        async for desc in self.get_tasks_descriptions_async(cluster_name, [task_arn]):
+            return desc

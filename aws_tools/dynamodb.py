@@ -21,154 +21,148 @@ class DynamoDBException(Exception):
     pass
 
 
-class DynamoDBConnector:
+class DynamoDB:
     """
     A dynamodb connector that initalizes dynamodb resources
-    >>> ddb = DynamoDBConnector()
+    >>> ddb = DynamoDB()
     >>> await ddb.open()
     >>> ...
     >>> await ddb.close()
 
     It can also be used as an async context
-    >>> async with DynamoDBConnector() as ddb:
+    >>> async with DynamoDB() as ddb:
     >>>     ...
     """
 
     def __init__(self):
-        self._session = None
-        self._dynamodb = None
-        self._dynamodb_client = None
+        self.session = aioboto3.Session()
+        self._resource = None
+        self._client = None
 
-    async def open(self) -> Self:
-        self._session = aioboto3.Session()
-        self._dynamodb = await self._session.resource("dynamodb").__aenter__()
-        self._dynamodb_client = await self._session.client("dynamodb").__aenter__()
-        return self
+    async def open(self):
+        self._resource = await self.session.resource("dynamodb").__aenter__()
+        self._client = await self.session.client("dynamodb").__aenter__()
 
     async def close(self):
-        await self.dynamodb.__aexit__(None, None, None)
-        await self.dynamodb_client.__aexit__(None, None, None)
+        await self.resource.__aexit__(None, None, None)
+        self.resource = None
+        await self.client.__aexit__(None, None, None)
+        self.client = None
 
-    async def __aenter__(self) -> Self:
-        return await self.open()
+    async def __aenter__(self) -> "DynamoDB":
+        await self.open()
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
-    
+
     def _raise_not_initialized(self):
         raise RuntimeError(f"{type(self).__name__} object was not awaited on creation, and as such, is not initialized")
-    
-    @property
-    def session(self) -> aioboto3.Session:
-        if self._session is None:
-            self._raise_not_initialized()
-        else:
-            return self._session
 
     @property
-    def dynamodb(self) -> object:
-        if self._dynamodb is None:
+    def resource(self) -> object:
+        if self._resource is None:
             self._raise_not_initialized()
         else:
-            return self._dynamodb
+            return self._resource
 
     @property
-    def dynamodb_client(self) -> object:
-        if self._dynamodb_client is None:
+    def client(self) -> object:
+        if self._client is None:
             self._raise_not_initialized()
         else:
-            return self._dynamodb_client
+            return self._client
 
 
-async def create_table_async(
-        ddb: DynamoDBConnector,
-        table_name: str,
-        partition_names: dict[Literal["HASH", "RANGE"], str],
-        data_types: dict[str, Literal["S", "N", "B"]],
-        ttl_attribute: str | None = None,
-    ):
-    """
-    Creates a table, raise an error if it already exists.
+    async def create_table_async(
+            self,
+            table_name: str,
+            partition_names: dict[Literal["HASH", "RANGE"], str],
+            data_types: dict[str, Literal["S", "N", "B"]],
+            ttl_attribute: str | None = None,
+        ):
+        """
+        Creates a table, raise an error if it already exists.
 
-    Example
-    -------
-    >>> table = create_table("test-table")
-    """
-    try:
-        table = await ddb.dynamodb.create_table(
-            TableName=table_name,
-            KeySchema=[
-                {
-                    'AttributeName': partition_name,
-                    'KeyType': partition_type
-                }
-            for partition_type, partition_name in partition_names.items()],
-            AttributeDefinitions=[
-                {
-                    'AttributeName': name,
-                    'AttributeType': data_type
-                }
-            for name, data_type in data_types.items()],
-            BillingMode='PAY_PER_REQUEST'
-        )
-        # Wait until the table exists before continuing
-        await table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ResourceInUseException":
-            raise DynamoDBException(f"The table '{table_name}' already exists")
-        else:
-            raise
-    if ttl_attribute:
+        Example
+        -------
+        >>> table = create_table("test-table")
+        """
         try:
-            await ddb.dynamodb.update_time_to_live(
+            table = await self.resource.create_table(
                 TableName=table_name,
-                TimeToLiveSpecification={
-                    "Enabled": True,
-                    "AttributeName": ttl_attribute
-                }
+                KeySchema=[
+                    {
+                        'AttributeName': partition_name,
+                        'KeyType': partition_type
+                    }
+                for partition_type, partition_name in partition_names.items()],
+                AttributeDefinitions=[
+                    {
+                        'AttributeName': name,
+                        'AttributeType': data_type
+                    }
+                for name, data_type in data_types.items()],
+                BillingMode='PAY_PER_REQUEST'
             )
+            # Wait until the table exists before continuing
+            await table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
         except ClientError as e:
-            raise RuntimeError(f"Failed to enable TTL: {e}")
+            if e.response["Error"]["Code"] == "ResourceInUseException":
+                raise DynamoDBException(f"The table '{table_name}' already exists")
+            else:
+                raise
+        if ttl_attribute:
+            try:
+                await self.resource.update_time_to_live(
+                    TableName=table_name,
+                    TimeToLiveSpecification={
+                        "Enabled": True,
+                        "AttributeName": ttl_attribute
+                    }
+                )
+            except ClientError as e:
+                raise RuntimeError(f"Failed to enable TTL: {e}")
 
 
-async def delete_table_async(ddb: DynamoDBConnector, table_name: str, blocking: bool=True):
-    """
-    Delete a table, raise an error if it does not exists
+    async def delete_table_async(self, table_name: str, blocking: bool=True):
+        """
+        Delete a table, raise an error if it does not exists
 
-    Example
-    -------
-    >>> table = delete_table("test_table")
-    """
-    con = await Table(ddb, table_name)
-    try:
-        await con.table.delete()
-        # Wait until the table is correctly deleted before continuing
-        if blocking:
-            await con.table.meta.client.get_waiter('table_not_exists').wait(TableName=con.name)
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ResourceNotFoundException":
-            raise DynamoDBException(f"The table '{con.name}' does not exist")
+        Example
+        -------
+        >>> table = delete_table("test_table")
+        """
+        con = await Table(self, table_name)
+        try:
+            await con.table.delete()
+            # Wait until the table is correctly deleted before continuing
+            if blocking:
+                await con.table.meta.client.get_waiter('table_not_exists').wait(TableName=con.name)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                raise DynamoDBException(f"The table '{con.name}' does not exist")
+            else:
+                raise
+
+
+    async def list_table_names_async(self) -> list[str]:
+        """
+        list existing tables
+        """
+        return [table.name async for table in self.resource.tables.all()]
+
+
+    async def table_exists_async(self, table_name: str) -> bool:
+        """
+        Returns True if the table exists and False otherwise
+        """
+        try:
+            table = await Table(self, table_name)
+        except DynamoDBException:
+            return False
         else:
-            raise
-
-
-async def list_table_names_async(ddb: DynamoDBConnector) -> list[str]:
-    """
-    list existing tables
-    """
-    return [table.name async for table in ddb.dynamodb.tables.all()]
-
-
-async def table_exists_async(ddb: DynamoDBConnector, table_name: str) -> bool:
-    """
-    Returns True if the table exists and False otherwise
-    """
-    try:
-        table = await Table(ddb, table_name)
-    except DynamoDBException:
-        return False
-    else:
-        return True
+            return True
 
 
 class Table(Awaitable["Table"]):
@@ -177,7 +171,7 @@ class Table(Awaitable["Table"]):
     >>>     table = await Table(ddb, "test-table")
     """
 
-    def __init__(self, ddb: DynamoDBConnector, name: str):
+    def __init__(self, ddb: DynamoDB, name: str):
         self.name = name
         self._ddb = ddb
         self._ddb_table = None
@@ -187,7 +181,7 @@ class Table(Awaitable["Table"]):
         return self._inititialize().__await__()
 
     async def _inititialize(self) -> "Table":
-        self._ddb_table = await self._ddb.dynamodb.Table(self.name)
+        self._ddb_table = await self._ddb.resource.Table(self.name)
         try:
             await self._ddb_table.load()
         except ClientError as e:
