@@ -1,7 +1,8 @@
+import asyncio
 import unittest
 import pathlib
 from uuid import uuid4
-from aws_tools.synchrone.s3 import S3Exception, create_bucket, delete_bucket, bucket_exists, object_exists, get_object_bytes_size, list_objects_key_and_size, upload_files, download_files, upload_data, download_data, delete_objects, copy_object, delete_object, move_object, initiate_multipart_upload, upload_part, complete_multipart_upload, abort_multipart_upload, generate_download_url
+from aws_tools.s3 import S3Exception, S3
 from aws_tools._check_fail_context import check_fail
 
 
@@ -16,9 +17,12 @@ class DynamoDBTest(unittest.TestCase):
         create a table and define items
         """
         cls.bucket_name = "unit-test-"+str(uuid4())
-        create_bucket(cls.bucket_name)
-        with open(data_path / "sample_file.json", "r") as f:
-            cls.data = f.read().encode()
+        async def setup():
+            async with S3() as s3:
+                await s3.create_bucket_async(cls.bucket_name)
+                with open(data_path / "sample_file.json", "r") as f:
+                    cls.data = f.read().encode()
+        asyncio.run(setup())
 
     @classmethod
     def tearDownClass(cls):
@@ -26,11 +30,14 @@ class DynamoDBTest(unittest.TestCase):
         Delete the table if it was not done already
         """
         try:
-            delete_objects(cls.bucket_name, prefix="")
-            delete_bucket(cls.bucket_name)
+            async def tear_down():
+                async with S3() as s3:
+                    await s3.delete_objects_async(cls.bucket_name, prefix="")
+                    await s3.delete_bucket_async(cls.bucket_name)
+            asyncio.run(tear_down())
         except S3Exception:
             pass
-    
+
     def setUp(self):
         """
         Before each test case, do nothing
@@ -41,8 +48,11 @@ class DynamoDBTest(unittest.TestCase):
         """
         After each test case, delete all items
         """
-        if bucket_exists(self.bucket_name):
-            delete_objects(self.bucket_name, prefix="")
+        async def tear_down():
+            async with S3() as s3:
+                if await s3.bucket_exists_async(self.bucket_name):
+                    await s3.delete_objects_async(self.bucket_name, prefix="")
+        asyncio.run(tear_down())
 
     def test_upload(self):
         """
@@ -50,38 +60,41 @@ class DynamoDBTest(unittest.TestCase):
         """
         key = "sample_file.json"
         # create the file
-        assert not object_exists(self.bucket_name, key)
-        upload_data(self.data, self.bucket_name, key, overwrite=False)
-        with check_fail(S3Exception):
-            upload_data(self.data, self.bucket_name, key, overwrite=False)
-        upload_data(self.data, self.bucket_name, key, overwrite=True)
-        assert object_exists(self.bucket_name, key)
-        assert list(key for key, _ in list_objects_key_and_size(self.bucket_name, "")) == [key]
-        assert get_object_bytes_size(self.bucket_name, key) == len(self.data)
-        assert download_data(self.bucket_name, key) == self.data
-        # delete the file
-        delete_object(self.bucket_name, key)
-        assert not object_exists(self.bucket_name, key)
-        # check missing file behaviour
-        missing_key = "missing_file.json"
-        assert not object_exists(self.bucket_name, missing_key)
-        assert get_object_bytes_size(self.bucket_name, missing_key) is None
-        # upload files from disk
-        upload_files(data_path, self.bucket_name, prefix="")
-        assert set(key for key, _ in list_objects_key_and_size(self.bucket_name, "")) == {key, "empty_file.json"}
-        assert get_object_bytes_size(self.bucket_name, "empty_file.json") == 0
-        # move objects
-        move_object(self.bucket_name, key, self.bucket_name, missing_key)
-        assert not object_exists(self.bucket_name, key)
-        assert object_exists(self.bucket_name, missing_key)
-        # copy object
-        copy_object(self.bucket_name, missing_key, self.bucket_name, key)
-        assert object_exists(self.bucket_name, key)
-        assert object_exists(self.bucket_name, missing_key)
-        assert download_data(self.bucket_name, key)
-        # delete multiple files
-        delete_objects(self.bucket_name, prefix="")
-        assert list(key for key, _ in list_objects_key_and_size(self.bucket_name, "")) == []
+        async def test():
+            async with S3() as s3:
+                assert not await s3.object_exists_async(self.bucket_name, key)
+                await s3.upload_data_async(self.data, self.bucket_name, key, overwrite=False)
+                with check_fail(S3Exception):
+                    await s3.upload_data_async(self.data, self.bucket_name, key, overwrite=False)
+                await s3.upload_data_async(self.data, self.bucket_name, key, overwrite=True)
+                assert await s3.object_exists_async(self.bucket_name, key)
+                assert [key async for key, _ in s3.list_objects_key_and_size_async(self.bucket_name)] == [key]
+                assert (await s3.get_object_bytes_size_async(self.bucket_name, key)) == len(self.data)
+                assert (await s3.download_data_async(self.bucket_name, key)) == self.data
+                # delete the file
+                await s3.delete_object_async(self.bucket_name, key)
+                assert not await s3.object_exists_async(self.bucket_name, key)
+                # check missing file behaviour
+                missing_key = "missing_file.json"
+                assert not await s3.object_exists_async(self.bucket_name, missing_key)
+                assert (await s3.get_object_bytes_size_async(self.bucket_name, missing_key)) is None
+                # upload files from disk
+                await s3.upload_files_async(data_path, self.bucket_name, prefix="")
+                assert {key async for key, _ in s3.list_objects_key_and_size_async(self.bucket_name)} == {key, "empty_file.json"}
+                assert await s3.get_object_bytes_size_async(self.bucket_name, "empty_file.json") == 0
+                # move objects
+                await s3.move_object_async(self.bucket_name, key, self.bucket_name, missing_key)
+                assert not await s3.object_exists_async(self.bucket_name, key)
+                assert await s3.object_exists_async(self.bucket_name, missing_key)
+                # copy object
+                await s3.copy_object_async(self.bucket_name, missing_key, self.bucket_name, key)
+                assert await s3.object_exists_async(self.bucket_name, key)
+                assert await s3.object_exists_async(self.bucket_name, missing_key)
+                assert await s3.download_data_async(self.bucket_name, key)
+                # delete multiple files
+                await s3.delete_objects_async(self.bucket_name, prefix="")
+                assert [key async for key, _ in s3.list_objects_key_and_size_async(self.bucket_name, "")] == []
+        asyncio.run(test())
 
 
 if __name__ == "__main__":

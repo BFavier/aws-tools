@@ -1,8 +1,8 @@
 import unittest
 import time
 from uuid import uuid4
-from aws_tools.synchrone.cloud_formation import get_stack_outputs
-from aws_tools.synchrone.cognito import admin_sign_up, login, refresh_access_token, logout, set_attribute, admin_get_user_infos, get_user_infos, admin_enable_disable_user, admin_delete_user
+from aws_tools.cloud_formation import CloudFormation
+from aws_tools.cognito import Cognito
 
 authentication = get_stack_outputs("authentication")
 COGNITO_USER_POOL_ID = authentication["CognitoUserPoolId"]

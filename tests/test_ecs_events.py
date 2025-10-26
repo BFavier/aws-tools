@@ -1,7 +1,7 @@
 import json
 import pathlib
 import unittest
-from aws_tools.synchrone.ecs import ECSTaskStateChangeEvent
+from aws_tools.ecs import ECSTaskStateChangeEvent
 
 
 

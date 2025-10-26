@@ -45,9 +45,9 @@ class DynamoDB:
 
     async def close(self):
         await self.resource.__aexit__(None, None, None)
-        self.resource = None
+        self._resource = None
         await self.client.__aexit__(None, None, None)
-        self.client = None
+        self._client = None
 
     async def __aenter__(self) -> "DynamoDB":
         await self.open()
@@ -383,7 +383,7 @@ class Table(Awaitable["Table"]):
             processed_items = {}
             unprocessed_keys = [{k: serializer.serialize(v) for k, v in key.items()} for key in chunk_keys]
             while len(unprocessed_keys) > 0:
-                response = await self._ddb.dynamodb_client.batch_get_item(RequestItems={self.name: {"Keys": unprocessed_keys, "ConsistentRead": consistent_read}})
+                response = await self._ddb.client.batch_get_item(RequestItems={self.name: {"Keys": unprocessed_keys, "ConsistentRead": consistent_read}})
                 processed_items.update(
                     {
                         tuple(deserializer.deserialize(item[k]) for k in self.keys.values()) : {kk: deserializer.deserialize(vv) for kk, vv in item.items()}
