@@ -2,7 +2,7 @@ import unittest
 import asyncio
 from uuid import uuid4
 from decimal import Decimal
-from aws_tools.dynamodb import Attr, Decimal, DynamoDBException, DynamoDBConnector, Table, list_table_names_async, table_exists_async, create_table_async, delete_table_async
+from aws_tools.dynamodb import Attr, Decimal, DynamoDBException, DynamoDB, Table
 from aws_tools._check_fail_context import check_fail
 
 
@@ -15,8 +15,8 @@ class DynamoDBTest(unittest.TestCase):
         """
         cls.table_name = "unit-test-"+str(uuid4())
         async def create_table():
-            async with DynamoDBConnector() as ddb:
-                await create_table_async(ddb, cls.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
+            async with DynamoDB() as ddb:
+                await ddb.create_table_async(cls.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
         asyncio.run(create_table())
         cls.item_id = {"id": str(uuid4()), "event_time": "23h30"}
         cls.item = {**cls.item_id, "field": 10.0, "some_field": "ok", "other_field": True}
@@ -34,8 +34,8 @@ class DynamoDBTest(unittest.TestCase):
         """
         try:
             async def clean_up():
-                async with DynamoDBConnector() as ddb:
-                    delete_table_async(ddb, cls.table_name, blocking=False)
+                async with DynamoDB() as ddb:
+                    ddb.delete_table_async(cls.table_name, blocking=False)
             asyncio.run(clean_up())
         except DynamoDBException:
             pass
@@ -51,7 +51,7 @@ class DynamoDBTest(unittest.TestCase):
         After each test case, delete all items
         """
         async def cleanup():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 try:
                     table = await Table(ddb, self.table_name)
                 except DynamoDBException:
@@ -65,12 +65,12 @@ class DynamoDBTest(unittest.TestCase):
         Test basic table creation and listing
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
-                assert self.table_name in await list_table_names_async(ddb)
-                assert await table_exists_async(ddb, self.table_name)
-                assert not await table_exists_async(ddb, "unknown_table")
+            async with DynamoDB() as ddb:
+                assert self.table_name in await ddb.list_table_names_async()
+                assert await ddb.table_exists_async(self.table_name)
+                assert not await ddb.table_exists_async("unknown_table")
                 with check_fail(DynamoDBException):
-                    await create_table_async(ddb, self.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
+                    await ddb.create_table_async(self.table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
         asyncio.run(test())
 
     def test_table_deletion(self):
@@ -78,15 +78,15 @@ class DynamoDBTest(unittest.TestCase):
         test table deletion
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 new_table_name = "unit-test-unknown-table-"+str(uuid4())
-                await create_table_async(ddb, new_table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
-                assert await table_exists_async(ddb, new_table_name)
-                await delete_table_async(ddb, new_table_name)
-                assert not await table_exists_async(ddb, new_table_name)
-                assert new_table_name not in await list_table_names_async(ddb)
+                await ddb.create_table_async(new_table_name, {"HASH": "id", "RANGE": "event_time"}, {"id": "S", "event_time": "S"})
+                assert await ddb.table_exists_async(new_table_name)
+                await ddb.delete_table_async(new_table_name)
+                assert not await ddb.table_exists_async(new_table_name)
+                assert new_table_name not in await ddb.list_table_names_async()
                 with check_fail(DynamoDBException):
-                    await delete_table_async(ddb, new_table_name)
+                    await ddb.delete_table_async(new_table_name)
         asyncio.run(test())
 
     def test_item_api(self):
@@ -94,7 +94,7 @@ class DynamoDBTest(unittest.TestCase):
         Test basic item API
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 table = await Table(ddb, self.table_name)
                 # test missing item behaviour
                 assert not await table.item_exists_async(self.item)
@@ -129,7 +129,7 @@ class DynamoDBTest(unittest.TestCase):
         test query and scan APIs
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 table = await Table(ddb, self.table_name)
                 # test missing items behaviour
                 assert (await table.scan_items_async())[0] == []
@@ -163,7 +163,7 @@ class DynamoDBTest(unittest.TestCase):
         test item update api
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 table = await Table(ddb, self.table_name)
                 assert (await table.update_item_async(self.item_id, put_fields={"field": 1}, return_object="NEW")) is None  # update does not happen by default if item does not exists
                 assert (await table.get_item_fields_async(self.item_id, {"field"})) is None
@@ -191,7 +191,7 @@ class DynamoDBTest(unittest.TestCase):
         test get_item api
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 table = await Table(ddb, self.table_name)
                 # return None on a missing item
                 assert (await table.get_item_fields_async(self.item_id, {"field"})) is None
@@ -209,7 +209,7 @@ class DynamoDBTest(unittest.TestCase):
         When adding items to a set field that do not exist, the field is created
         """
         async def test():
-            async with DynamoDBConnector() as ddb:
+            async with DynamoDB() as ddb:
                 table = await Table(ddb, self.table_name)
                 item_id = {"id": str(uuid4()), "event_time": "23h30"}
                 item = {**item_id, "set_field": set()}

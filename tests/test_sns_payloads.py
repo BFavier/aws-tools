@@ -1,7 +1,8 @@
 import json
+import asyncio
 import pathlib
 import unittest
-from aws_tools.synchrone.sns import SNSEventsTypes, verify_sns_signature
+from aws_tools.sns import SNSEventsTypes, SimpleNotificationService
 from pydantic import TypeAdapter
 
 
@@ -19,7 +20,9 @@ class TestSNS(unittest.TestCase):
             with open(data_path / file, "r") as h:
                 payload = json.load(h)
             body = TypeAdapter(SNSEventsTypes).validate_python(payload)
-            assert verify_sns_signature(body)
+            async def test():
+                return await SimpleNotificationService.verify_sns_signature_async(body)
+            assert asyncio.run(test())
         assert len(files) > 0, "No files found in the data path"
 
 

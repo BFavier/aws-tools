@@ -1,7 +1,7 @@
 import json
 import pathlib
 import unittest
-from aws_tools.synchrone.ses import SESEmailEvent
+from aws_tools.ses import SESEmailEvent
 
 
 

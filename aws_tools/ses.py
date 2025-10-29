@@ -7,29 +7,62 @@ https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-exampl
 """
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal, Union
-from aiobotocore.session import get_session
+from aiobotocore.session import get_session, AioBaseClient
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 
 
-session = get_session()
-
-
-
-async def send_email_async(
-        sender_email: str,
-        recipient_emails: list[str],
-        subject: str,
-        body: str,
-        configuration_set: str | None = None,
-    ):
+class SimpleEmailingService:
     """
-    Send an email to the given recipients
+    >>> ses = SimpleEmailingService()
+    >>> await ses.open()
+    >>> ...
+    >>> await ses.close()
+
+    It can also be used as an async context
+    >>> async with SimpleEmailingService() as ses:
+    >>>     ...
     """
-    kwargs = {} if configuration_set is None else {"ConfigurationSetName": configuration_set}
-    async with session.create_client("ses") as ses:
-        await ses.send_email(
+
+    def __init__(self):
+        self.session = get_session()
+        self._client: AioBaseClient | None = None
+
+    async def open(self):
+        self._client = await self.session.create_client("ses").__aenter__()
+
+    async def close(self):
+        await self._client.__aexit__(None, None, None)
+        self._client = None
+
+    async def __aenter__(self) -> "SimpleEmailingService":
+        await self.open()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
+    @property
+    def client(self) -> object:
+        if self._client is None:
+            raise RuntimeError(f"{type(self).__name__} object is not initialized")
+        else:
+            return self._client
+
+    async def send_email_async(
+            self,
+            sender_email: str,
+            recipient_emails: list[str],
+            subject: str,
+            body: str,
+            configuration_set: str | None = None,
+        ):
+        """
+        Send an email to the given recipients
+        """
+        kwargs = {} if configuration_set is None else {"ConfigurationSetName": configuration_set}
+        await self.client.send_email(
             Source=sender_email,
             Destination={
                 'ToAddresses': recipient_emails,
@@ -42,54 +75,53 @@ async def send_email_async(
         )
 
 
-async def send_raw_email_async(
-    sender_email: str,
-    recipient_emails: list[str],
-    subject: str,
-    text: str | None = None,
-    html: str | None = None,
-    attachments: dict[str, bytes] = {},
-    configuration_set: str | None = None,
-):
-    """
-    Send an email with optional file attachments via AWS SES
-    """
-    # Build MIME email
-    msg = MIMEMultipart("mixed" if len(attachments) > 0 else "alternative")
-    msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = ", ".join(recipient_emails)
-    # Add email body
-    if text is not None and html is not None:
-        # multipart/alternative inside multipart/mixed
-        alt = MIMEMultipart("alternative")
-        alt.attach(MIMEText(text, "plain", "utf-8"))
-        alt.attach(MIMEText(html, "html", "utf-8"))
-        msg.attach(alt)
-    elif text is not None:
-        msg.attach(MIMEText(text, "plain", "utf-8"))
-    elif html is not None:
-        msg.attach(MIMEText(html, "html", "utf-8"))
-    # Add attachments if provided
-    for file_name, file_content in attachments.items():
-        part = MIMEApplication(file_content)
-        part.add_header(
-            "Content-Disposition",
-            "attachment",
-            filename=file_name
-        )
-        msg.attach(part)
-    # Send via SES
-    kwargs = {} if configuration_set is None else {"ConfigurationSetName": configuration_set}
-    async with session.create_client("ses") as ses:
-        response = await ses.send_raw_email(
+    async def send_raw_email_async(
+        self,
+        sender_email: str,
+        recipient_emails: list[str],
+        subject: str,
+        text: str | None = None,
+        html: str | None = None,
+        attachments: dict[str, bytes] = {},
+        configuration_set: str | None = None,
+    ):
+        """
+        Send an email with optional file attachments via AWS SES
+        """
+        # Build MIME email
+        msg = MIMEMultipart("mixed" if len(attachments) > 0 else "alternative")
+        msg["Subject"] = subject
+        msg["From"] = sender_email
+        msg["To"] = ", ".join(recipient_emails)
+        # Add email body
+        if text is not None and html is not None:
+            # multipart/alternative inside multipart/mixed
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(text, "plain", "utf-8"))
+            alt.attach(MIMEText(html, "html", "utf-8"))
+            msg.attach(alt)
+        elif text is not None:
+            msg.attach(MIMEText(text, "plain", "utf-8"))
+        elif html is not None:
+            msg.attach(MIMEText(html, "html", "utf-8"))
+        # Add attachments if provided
+        for file_name, file_content in attachments.items():
+            part = MIMEApplication(file_content)
+            part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=file_name
+            )
+            msg.attach(part)
+        # Send via SES
+        kwargs = {} if configuration_set is None else {"ConfigurationSetName": configuration_set}
+        response = await self.client.send_raw_email(
             Source=sender_email,
             Destinations=recipient_emails,
             RawMessage={"Data": msg.as_bytes()},
             **kwargs
         )
-
-    return response
+        return response
 
 
 class _SESEvent(BaseModel):
