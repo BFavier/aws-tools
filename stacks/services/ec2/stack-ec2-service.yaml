@@ -21,8 +21,8 @@ Parameters:
   InstanceType:
     Type: String
     Description: EC2 instance Type
-    Default: t2.micro
-  DiskSpace:
+    Default: t3.micro
+  DiskSpaceGib:
     Type: Number
     Description: Disk space in gB
     Default: '20'
@@ -30,7 +30,7 @@ Parameters:
     Type: String
     Default: ''
     Description: 'The environment variables to pass to the docker image. Example: !Sub "-e AWS_DEFAULT_REGION=${AWS::Region} -e AWS_STACK_NAME=${AWS::StackName}"'
-  CertificateArn:
+  UsEast1CertificateArn:
     Type: String
     Description: Optional ARN of the ACM certificate for the hosted zone. If provided, a cloudfront distribution will be placed between DNS record and EC2 instance, to handle https to http conversion. An A record to the private IP will be created otherwise.
     Default: ''
@@ -42,11 +42,14 @@ Parameters:
     Type: String
     Description: The name of an existing EC2 KeyPair to enable SSH access to the instances (optional). Leave empty to not use a key pair (ssh port will be closed).
     Default: ''
+  LogGroupName:
+    Type: String
+    Default: "/ec2/service"
 
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
-  HandleHttps: !Not [!Equals ['', !Ref CertificateArn]]
-  NotHandleHttps: !Equals ['', !Ref CertificateArn]
+  HandleHttps: !Not [!Equals ['', !Ref UsEast1CertificateArn]]
+  NotHandleHttps: !Equals ['', !Ref UsEast1CertificateArn]
   NotHasPolicy: !Equals ['', !Ref RolePolicyArn]
 
 Resources:
@@ -77,11 +80,10 @@ Resources:
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /ec2/${AWS::StackName}
+      LogGroupName: !Ref LogGroupName
       RetentionInDays: 30
   DefaultPolicy:
     Type: AWS::IAM::ManagedPolicy
-    Condition: NotHasPolicy
     Properties:
       ManagedPolicyName: !Sub ${AWS::StackName}-DefaultPolicy
       PolicyDocument:
@@ -111,10 +113,12 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns: !If
-        - NotHasPolicy
-        - - !Ref DefaultPolicy
-        - !Ref RolePolicyArn
+      ManagedPolicyArns:
+        - !Ref DefaultPolicy
+        - !If
+          - NotHasPolicy
+          - !Ref AWS::NoValue
+          - !Ref RolePolicyArn
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -122,13 +126,14 @@ Resources:
         - !Ref EC2InstanceRole
   EC2Instance:
     Type: AWS::EC2::Instance
+    DependsOn: EC2LogGroup
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: !Ref DiskSpace
+            VolumeSize: !Ref DiskSpaceGib
             VolumeType: gp3
             DeleteOnTermination: true
       SubnetId: !Ref SubnetId
@@ -143,20 +148,21 @@ Resources:
         HttpTokens: required
         HttpEndpoint: enabled
       UserData:
-        Fn::Base64:
-          !Sub |
-            #!/bin/bash
-            yum update -y
-            # Install CloudWatch Agent
-            yum install amazon-cloudwatch-agent -y
-            # Install and start Docker
-            amazon-linux-extras install docker -y
-            service docker start
-            usermod -a -G docker ec2-user
-            # Pull and run Docker container
-            aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
-            docker pull ${DockerImage}
-            docker run -d --rm --network host ${EnvironmentVariables} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=/ec2/webapp --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -x
+          yum update -y
+          # Install CloudWatch Agent
+          yum install amazon-cloudwatch-agent -y
+          # Install and start Docker
+          amazon-linux-extras install docker -y
+          service docker start
+          usermod -a -G docker ec2-user
+          # Pull and run Docker container
+          aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
+          docker pull ${DockerImage}
+          echo ${LogGroupName}
+          docker run -d --network host -e AWS_DEFAULT_REGION=${AWS::Region} --log-driver=awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=${LogGroupName} --log-opt awslogs-stream=docker-logs-$(date +%s) ${DockerImage}
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-Instance
@@ -220,7 +226,7 @@ Resources:
           CachePolicyId: !Ref CloudFrontCachePolicy
           OriginRequestPolicyId: !Ref CloudFrontOriginRequestPolicy
         ViewerCertificate:
-          AcmCertificateArn: !Ref CertificateArn
+          AcmCertificateArn: !Ref UsEast1CertificateArn
           SslSupportMethod: sni-only
           MinimumProtocolVersion: TLSv1.2_2021
         Aliases:

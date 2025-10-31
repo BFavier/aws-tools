@@ -15,16 +15,6 @@ Parameters:
     Type: String
     Description: The domain name corresponding to the ACM certificate
 
-  TargetInstanceIds:
-    Type: CommaDelimitedList
-    Description: 'The ID of the EC2 instances that are initial targest of the load balancer. As a JSON string of the form: ''[{"Id": "i-0123456789abcdef0"}, {"Id": "i-0abcdef1234567890"}]'''
-    Default: ''
-    ConstraintDescription: Must be one of the valid instance specified in the stack parameters
-  HealthCheckPath:
-    Type: String
-    Description: The route on which GET requests are sent to check the health of the service
-    Default: /
-
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
 
@@ -75,4 +65,7 @@ Resources:
         - CertificateArn: !Ref CertificateArn
 
 Outputs:
-  pass
+  LoadBalancer:
+    Value: !Ref LoadBalancer
+  Listener:
+    Value: !Ref Listener
