@@ -25,6 +25,7 @@ Resources:
       Code:
         ZipFile: |
           import boto3
+          import traceback
           import cfnresponse
           
           s3 = boto3.client("s3")
@@ -34,7 +35,7 @@ Resources:
                   props = event["ResourceProperties"]
                   bucket = props["BucketName"]
                   prefix = props["Prefix"]
-                  rule_id = props["RuleId"]
+                  rule_id = props["ruleId"]
                   expiration_days = props["ExpirationDays"]
 
                   # Get existing config if it exists
@@ -48,29 +49,34 @@ Resources:
                           raise
 
                   # If the rule must be preemptively deleted
-                  if event["RequestType"] == "Update" or event["RequestType"] == "Delete":
-                      # Remove old rule if it exists
+                  if event["RequestType"] in ("Update", "Delete"):
+                      # Remove rule if it exists
                       rules = [r for r in rules if r.get("ID") != rule_id]
 
                   # Add the rule
-                  if not any(r.get("ID") == rule_id for r in rules) and event["RequestType"] != "Delete":
-                      rules.append({
+                  if (event["RequestType"] != "Delete"):
+                      new_rule = {
                           "ID": rule_id,
-                          "Prefix": prefix,
+                          "Filter": {"Prefix": prefix},
                           "Status": "Enabled",
-                          "Expiration": {"Days": int(expiration_days)}
-                      })
+                          "Expiration": {"Days": int(expiration_days)},
+                          "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": int(expiration_days)}
+                      }
+                      rules.append(new_rule)
 
+                  # update the lifecycle rules
+                  if len(rules) > 0:
                       s3.put_bucket_lifecycle_configuration(
                           Bucket=bucket,
                           LifecycleConfiguration={"Rules": rules}
                       )
-
+                  else:
+                      s3.delete_bucket_lifecycle(Bucket=bucket)
               except Exception as e:
                   print("Error:", e)
+                  print(''.join(traceback.format_exception(None, e, e.__traceback__)))
                   cfnresponse.send(event, context, cfnresponse.FAILED, {})
                   return
-
               cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
       Timeout: 60
   LifecycleRole:
@@ -103,7 +109,7 @@ Resources:
     DependsOn: LifecycleFunction
     Properties:
       ServiceToken: !GetAtt LifecycleFunction.Arn  # This is not used but required
-      RuleId: !Sub "${AWS::StackName}-LifecycleRule"
+      ruleId: !Sub "${AWS::StackName}-LifecycleRule"
       BucketName: !Ref BucketName
       Prefix: !Ref Prefix
       ExpirationDays: !Ref ExpirationDays
