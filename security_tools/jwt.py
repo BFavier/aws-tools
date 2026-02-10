@@ -28,7 +28,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         Message stored in JWT
         """
         iat: int
-        exp: int
+        exp: int | None
         data: T
 
     header: Header
@@ -54,7 +54,7 @@ class JsonWebToken(BaseModel, Generic[T]):
             raise ValueError(f"Alg type is not yet suported")
 
     @classmethod
-    def generate(cls, data: T, validity_seconds: int, encryption: RSAPrivateKey) -> "JsonWebToken[T]":
+    def generate(cls, data: T, validity_seconds: int | None, encryption: RSAPrivateKey) -> "JsonWebToken[T]":
         """
         Generate and sign a JWT
         """
@@ -64,7 +64,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         else:
             raise ValueError("Unexpected encryption key type")
         header = JsonWebToken.Header(alg=alg, typ="JWT")
-        payload = cls.Payload(iat=now, exp=now+validity_seconds, data=data)
+        payload = cls.Payload(iat=now, exp=None if validity_seconds is None else now+validity_seconds, data=data)
         return JsonWebToken(
             header=header,
             payload=payload,
@@ -93,7 +93,10 @@ class JsonWebToken(BaseModel, Generic[T]):
         """
         Returns whether the JWT is expired
         """
-        return int(datetime.now(UTC).timestamp()) > self.payload.exp
+        if self.payload.exp is None:
+            return False
+        else:
+            return int(datetime.now(UTC).timestamp()) > self.payload.exp
 
     def signature_is_valid(self, decryption_key: RSAPublicKey) -> bool:
         """

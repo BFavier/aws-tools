@@ -30,12 +30,12 @@ class RSAPrivateKey:
         )
 
     def sign(self, message: bytes) -> bytes:
-        return self.key.sign(message, padding.PKCS1v15(), hashes.SHA256())
+        return self.key.sign(message, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
 
     def decrypt(self, message: bytes) -> bytes:
-        return self.key.decrypt(message, padding.PKCS1v15())
+        assert len(message) == (self.size // 8)
+        return self.key.decrypt(message, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
 
-    @property
     def public_key(self) -> "RSAPublicKey":
         return RSAPublicKey(self.key.public_key())
 
@@ -66,7 +66,7 @@ class RSAPublicKey:
 
     def __init__(self, key: rsa.RSAPublicKey):
         self.key = key
-    
+
     @classmethod
     def load(cls, data: bytes) -> "RSAPublicKey":
         return cls(key=serialization.load_pem_public_key(data))
@@ -78,16 +78,17 @@ class RSAPublicKey:
         )
 
     def encrypt(self, message: bytes) -> bytes:
-        return self.key.encrypt(message, padding.PKCS1v15())
+        assert len(message) <= self.max_encryptable_message_bytes_size
+        return self.key.encrypt(message, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
 
     def signature_is_valid(self, message: bytes, signature: bytes) -> bool:
         try:
-            self.key.verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
+            self.key.verify(signature, message, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
         except InvalidSignature:
             return False
         else:
            return True
-    
+
     @property
     def e(self) -> int:
         return self.key.public_numbers().e
@@ -100,3 +101,6 @@ class RSAPublicKey:
     def size(self) -> int:
         return self.key.key_size
 
+    @property
+    def max_encryptable_message_bytes_size(self) -> int:
+        return (self.size // 8) - 66

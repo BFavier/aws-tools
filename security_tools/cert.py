@@ -83,8 +83,7 @@ class SelfSignedCertificate:
         key_file.close()
         cert_file.write(cert.public_bytes(serialization.Encoding.PEM))
         cert_file.close()
-        self.cert_file, self.key_file = generate_self_signed_cert()
-        return CertKeyPair(cert_path=self.cert_file, private_key_path=self.key_file)
+        return CertKeyPair(cert_path=cert_file.name, private_key_path=key_file.name)
 
     def __exit__(self, type_: type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None) -> bool | None:
         # Delete the temp files, ignore if already removed
