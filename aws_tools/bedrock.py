@@ -1,3 +1,4 @@
+import aioboto3
 from base64 import b64decode, b64encode
 from typing import Literal, Optional, Any, Annotated
 from pydantic import BaseModel, Field, BeforeValidator, SerializerFunctionWrapHandler, SerializationInfo
@@ -147,7 +148,8 @@ class BedrockToolConfig(BaseModel):
 
     tools: list[BedrockTool]
 
-class BedrockConversePayload(BaseModel):
+
+class BedrockConverseRequest(BaseModel):
     """
     https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html#API_runtime_Converse_RequestBody
     """
@@ -163,3 +165,119 @@ class BedrockConversePayload(BaseModel):
         """
         payload = self.model_dump(mode="python", by_alias=True, exclude_none=True)
         return payload
+
+
+class BedrockConverseResponse(BaseModel):
+    """
+    https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html#API_runtime_Converse_ResponseElements
+    """
+
+    class BedrockTokenUsage(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html
+        """
+        inputTokens: int
+        outputTokens: int
+        totalTokens: int
+
+    class BedrockConverseMetrics(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseMetrics.html
+        """
+        latencyMs: int
+
+    class BedrockPerformanceConfiguration(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_PerformanceConfiguration.html
+        """
+        latencyOptimized: Literal["standard ", "optimized"] | None = None
+
+    class BedrockServiceTier(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ServiceTier.html
+        """
+        tier: Literal["priority", "default", "flex", "reserved"]
+
+    class BedrockConverseTrace(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseTrace.html
+        """
+
+        class BedrockGuardrailTrace(BaseModel):
+            """
+            https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_GuardrailTraceAssessment.html
+            """
+
+            class BedrockGuardrailAssesment(BaseModel):
+                """
+                https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_GuardrailAssessment.html
+                this is getting deep, I give up mapping this object for now
+                """
+                appliedGuardrailDetails : Any | None = None
+                automatedReasoningPolicy : Any | None = None
+                contentPolicy : Any | None = None
+                contextualGroundingPolicy : Any | None = None
+                invocationMetrics : Any | None = None
+                sensitiveInformationPolicy : Any | None = None
+                topicPolicy : Any | None = None
+                wordPolicy : Any | None = None
+
+            actionReason : str | None = None
+            inputAssessment : dict[str, list[BedrockGuardrailAssesment]] | None = None
+            modelOutput : list[str] | None = None
+            outputAssessments : dict[str, list[BedrockGuardrailAssesment]] | None = None
+
+        class BedrockPromptRouterTrace(BaseModel):
+            """
+            https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_PromptRouterTrace.html
+            """
+            invokedModelId: str | None = None
+
+        guardrail: str | None = None
+        promptRouter: BedrockPromptRouterTrace | None = None
+
+    class BedrockConverseOutput(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseOutput.html
+        """
+        message: BedrockMessage
+
+    additionalModelResponseFields: dict
+    metrics: BedrockConverseMetrics
+    output: BedrockConverseOutput
+    performanceConfig: BedrockPerformanceConfiguration
+    serviceTier: BedrockServiceTier
+    stopReason: Literal["end_turn", "tool_use", "max_tokens", "stop_sequence", "guardrail_intervened", "content_filtered", "malformed_model_output", "malformed_tool_use", "model_context_window_exceeded"]
+    trace: BedrockConverseTrace
+    usage: BedrockTokenUsage
+
+
+class Bedrock:
+    """
+    Bedrock client that handles async converse API
+    """
+
+    def __init__(self, region: str | None = None):
+        self.session = aioboto3.Session()
+        if region is None:
+            self._region = self.session._session.get_config_variable("region")
+        else:
+            self._region = region
+        self._client = None
+
+    async def open(self):
+        self._client = await self.session.client("s3", region_name=self._region).__aenter__()
+
+    async def close(self):
+        await self._client.__aexit__(None, None, None)
+        self._client = None
+
+    async def __aenter__(self) -> "Bedrock":
+        await self.open()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
+    async def converse_async(self, payload: BedrockConverseRequest) -> BedrockConverseResponse:
+        return BedrockConverseResponse(**await self._client.converse(payload.model_dump(mode="json")))
