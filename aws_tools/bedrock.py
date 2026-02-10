@@ -242,14 +242,14 @@ class BedrockConverseResponse(BaseModel):
         """
         message: BedrockMessage
 
-    additionalModelResponseFields: dict
     metrics: BedrockConverseMetrics
     output: BedrockConverseOutput
-    performanceConfig: BedrockPerformanceConfiguration
-    serviceTier: BedrockServiceTier
     stopReason: Literal["end_turn", "tool_use", "max_tokens", "stop_sequence", "guardrail_intervened", "content_filtered", "malformed_model_output", "malformed_tool_use", "model_context_window_exceeded"]
-    trace: BedrockConverseTrace
     usage: BedrockTokenUsage
+    additionalModelResponseFields: dict | None = None
+    performanceConfig: BedrockPerformanceConfiguration | None = None
+    serviceTier: BedrockServiceTier | None = None
+    trace: BedrockConverseTrace | None = None
 
 
 class Bedrock:
@@ -266,7 +266,7 @@ class Bedrock:
         self._client = None
 
     async def open(self):
-        self._client = await self.session.client("s3", region_name=self._region).__aenter__()
+        self._client = await self.session.client("bedrock-runtime", region_name=self._region).__aenter__()
 
     async def close(self):
         await self._client.__aexit__(None, None, None)
@@ -280,4 +280,4 @@ class Bedrock:
         await self.close()
 
     async def converse_async(self, payload: BedrockConverseRequest) -> BedrockConverseResponse:
-        return BedrockConverseResponse(**await self._client.converse(payload.model_dump(mode="json")))
+        return BedrockConverseResponse(**await self._client.converse(**payload.model_dump(mode="json", exclude_none=True)))
