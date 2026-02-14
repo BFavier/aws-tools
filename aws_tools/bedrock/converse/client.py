@@ -41,32 +41,32 @@ class Bedrock:
         response = await self._client.converse_stream(**payload.model_dump(mode="json", exclude_none=True))
         message_start = BedrockConverseStreamEventResponse.MessageStartEvent(role="assistant")
         block_content_by_index: dict[int, BedrockContentBlock] = {}
+        message_stop = BedrockConverseStreamEventResponse.MessageStopEvent | None = None
+        metadata = BedrockConverseStreamEventResponse.Metadata | None = None
         async for event in response["stream"]:
             content = BedrockConverseStreamEventResponse(**event).content()
             if isinstance(content, BedrockConverseStreamEventResponse.MessageStartEvent):
                 message_start = content
             if isinstance(content, BedrockConverseStreamEventResponse.ContentBlockStartEvent):
-                block_content_by_index[content.contentBlockIndex] = content.start
+                block_content_by_index[content.contentBlockIndex] = content.start.as_initial_content_block()
             elif isinstance(content, BedrockConverseStreamEventResponse.ContentBlockDeltaEvent):
                 if content.delta.text is not None:
                     yield content.delta
                 block_content_by_index[content.contentBlockIndex] += content.delta
             elif isinstance(content, BedrockConverseStreamEventResponse.Metadata):
-                yield BedrockConverseResponse(
-                    usage=content.usage,
-                    metrics=content.metrics,
-                    output=BedrockConverseResponse.BedrockConverseOutput(
-                        message=BedrockMessage(
-                            role=message_start.role,
-                            content=[
-                                BedrockContentBlock()
-                                for i, block in sorted(block_content_by_index)
-                            ]
-                        )
-                    )
-                )
-                return
+                metadata = content
+            elif isinstance(content, BedrockConverseStreamEventResponse.MessageStopEvent):
+                message_stop = content
             else:
                 asyncio.sleep(0.0)
-        raise RuntimeError("No metadata block encountered")
-
+        yield BedrockConverseResponse(
+            metrics=metadata.metrics,
+            output=BedrockConverseResponse.BedrockConverseOutput(
+                message=BedrockMessage(
+                    role=message_start.role,
+                    content=[block for i, block in sorted(block_content_by_index.items())]
+                )
+            ),
+            stopReason=message_stop.stopReason,
+            usage=metadata.usage,
+        )

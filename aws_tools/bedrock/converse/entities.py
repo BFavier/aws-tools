@@ -1,7 +1,7 @@
-import aioboto3
+import json
 from base64 import b64decode, b64encode
-from collections import defaultdict
-from typing import Literal, Optional, Any, Annotated, Type, TypeVar, Self, AsyncIterable
+from json.decoder import JSONDecodeError
+from typing import Literal, Any, Annotated, TypeVar, Self
 from pydantic import BaseModel, Field, BeforeValidator, SerializerFunctionWrapHandler, SerializationInfo
 from pydantic.functional_serializers import WrapSerializer
 
@@ -38,10 +38,10 @@ class BedrockInferenceConfig(BaseModel):
     """
     https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InferenceConfiguration.html
     """
-    maxTokens: Optional[int] = None
-    temperature: Optional[float] = None
-    topP: Optional[float] = None
-    stopSequences: Optional[list[str]] = None
+    maxTokens: int | None = None
+    temperature: float | None = None
+    topP: float | None = None
+    stopSequences: list[str] | None = None
 
 
 class BedrockContentBlock(BaseModel):
@@ -55,89 +55,184 @@ class BedrockContentBlock(BaseModel):
         """
         uri: str
 
-    class BedrockDocumentBlock(BaseModel):
+    class DocumentBlock(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_DocumentBlock.html
         """
 
-        class BedrockDocumentSource(BaseModel):
+        class DocumentSource(BaseModel):
             """
             https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_DocumentSource.html
             """
 
-            bytes: Optional[Base64Bytes] = None
-            s3Location: Optional["BedrockContentBlock.S3Location"] = None
-            text: Optional[str] = None
+            bytes: Base64Bytes | None = None
+            s3Location: "BedrockContentBlock.S3Location" | None = None
+            text: str | None = None
 
         name: str
-        source: BedrockDocumentSource
+        source: DocumentSource
         format: Literal["pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md"]
 
-    class BedrockImage(BaseModel):
+    class Image(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ImageBlock.html
         """
 
-        class BedrockImageSource(BaseModel):
+        class ImageSource(BaseModel):
             """
             https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ImageSource.html
             """
-            bytes: Optional[Base64Bytes] = None
-            s3Location: Optional["BedrockContentBlock.S3Location"] = None
+            bytes: Base64Bytes | None = None
+            s3Location: "BedrockContentBlock.S3Location" | None = None
 
             def __add__(self, other: Self) -> Self:
                 return type(self)(bytes=_add_nullables(self.bytes, other.bytes), s3Location=_add_nullables(self.s3Location, other.s3Location))
 
         format: Literal["png", "jpeg", "gif", "webp"]
-        source: BedrockImageSource
+        source: ImageSource
 
-    class BedrockToolUse(BaseModel):
+        def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta.ImageBlockDelta") -> Self:
+            self.source.bytes = _add_nullables(self.source.bytes, other.imageSource.bytes, b"")
+            self.source.s3Location = self.source.s3Location or other.imageSource.s3Location
+            return self
+
+    class ToolUse(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolUseBlock.html
         """
-        input: dict
+        input: dict | str | None = None  # str type only for incompletely generated input
         name: str
         toolUseId: str
 
-    class BedrockToolResult(BaseModel):
+        def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta.ToolUseBlockDelta") -> Self:
+            self.input = (self.input + other.input)
+            try:
+                self.input = json.loads(self.input)
+            except JSONDecodeError as e:
+                pass
+            return self
+
+    class ToolResult(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultBlock.html
         """
 
-        class BedrockToolResultContent(BaseModel):
+        class ToolResultContent(BaseModel):
             """
             https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultContentBlock.html
             """
-            json_: Optional[Any] = Field(None, alias="json")
-            text: Optional[str] = None
-            document: Optional["BedrockContentBlock.BedrockDocumentBlock"] = None
-            image: Optional["BedrockContentBlock.BedrockImage"] = None
+            json: dict | None = None
+            text: str | None = None
+            document: "BedrockContentBlock.DocumentBlock" | None = None
+            image: "BedrockContentBlock.Image" | None = None
 
-        content: list[BedrockToolResultContent]
+        content: list[ToolResultContent]
         toolUseId: str
         status: Literal["success", "error"]
+
+        def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta.ToolResultBlockDelta") -> Self:
+            self.content.append(
+                BedrockContentBlock.ToolResult.ToolResultContent(
+                    json=other.json,
+                    text=other.text,
+                    image=None,
+                    document=None,
+                )
+            )
+            return self
+
+    class ReasoningContentBlock(BaseModel):
+        """
+        https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ReasoningContentBlock.html
+        """
+
+        class ReasoningTextBlock(BaseModel):
+            """
+            https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ReasoningTextBlock.html
+            """
+            text: str
+            signature: str | None = None
+
+        reasoningText: ReasoningTextBlock | None = None
+        redactedContent: Base64Bytes | None = None
+
+        def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta.ReasoningContentBlockDelta") -> Self:
+            self.redactedContent=_add_nullables(self.redactedContent, other.redactedContent, b"")
+            self.reasoningText.text=_add_nullables(self.reasoningText.text, other.text, "")
+            self.reasoningText.signature = self.reasoningText.signature or other.signature
+            return self
 
     class CitationsContentBlock(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CitationsContentBlock.html
         """
-        citations: list[Any] | None = None
-        content: Any | None = None
 
-    document: BedrockDocumentBlock | None = None
-    image: BedrockImage | None = None
+        class Citation(BaseModel):
+            """
+            https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Citation.html
+            """
+
+            class CitationLocation(BaseModel):
+                """
+                https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CitationLocation.html
+                TODO: complete deeper nested mapping of the object
+                """
+                documentChar: Any | None = None
+                documentChunk: Any | None = None
+                documentPage: Any | None = None
+                searchResultLocation: Any | None = None
+                web: Any | None = None
+
+            class CitationSourceContent(BaseModel):
+                """
+                https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CitationSourceContent.html
+                """
+                text: str | None = None
+
+            location: CitationLocation | None = None
+            source: str | None = None
+            sourceContent: CitationSourceContent | None = None
+            title: str | None = None
+
+        class CitationGeneratedContent(BaseModel):
+            """
+            https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CitationGeneratedContent.html
+            """
+            text: str
+
+        citations: list[Citation] | None = None
+        content: CitationGeneratedContent | None = None
+
+    document: DocumentBlock | None = None
+    image: Image | None = None
+    reasoningContent: ReasoningContentBlock | None = None
     text: str | None = None
-    toolUse: BedrockToolUse | None = None
-    toolResult: BedrockToolResult | None = None
+    toolUse: ToolUse | None = None
+    toolResult: ToolResult | None = None
     citationsContent: CitationsContentBlock | None = None
 
-    def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent") -> Self:
-        self.citation =_add_nullables(self.citation, other.citation),
-        self.image = _add_nullables(self.image, other.image),
-        self.reasoning =_add_nullables(self.reasoning, other.reasoning),
-        self.text =_add_nullables(self.text, other.text),
-        self.toolResult =_add_nullables(self.toolResult, other.toolResult),
-        self.toolUse =_add_nullables(self.toolUse, other.toolUse, zero=BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta.ToolUseBlockDelta(""))
+    def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta") -> Self:
+        if self.citationsContent is not None:
+            if other.citation is not None:
+                self.citationsContent.citations.append(
+                    BedrockContentBlock.CitationsContentBlock.Citation(
+                        location=other.citation.location,
+                        source=other.citation.source,
+                        sourceContent=BedrockContentBlock.CitationsContentBlock.Citation.CitationSourceContent(text=other.citation.sourceContent.text),
+                        title=other.citation.title
+                    )
+                )
+            self.citationsContent.content = _add_nullables(self.citationsContent.content, other.text, "")
+        elif self.image is not None:
+            self.image += other.image
+        elif self.reasoning is not None:
+            self.reasoning += other.reasoning
+        elif self.toolResult is not None:
+            self.toolResult += other.toolResult
+        elif self.toolUse is not None:
+            self.toolUse += other.toolUse
+        else:
+            self.text = _add_nullables(self.text, other.text, "")
         return self
 
 
@@ -146,14 +241,14 @@ class BedrockSystemContentBlock(BaseModel):
     https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_SystemContentBlock.html
     """
 
-    class BedrockCachePointBlock(BaseModel):
+    class CachePointBlock(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CachePointBlock.html
         """
         type: Literal["default"]
         ttl: Literal["5m", "1h"] | None = None
     
-    class BedrockGuardrailConverseContentBlock(BaseModel):
+    class GuardrailConverseContentBlock(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_GuardrailConverseContentBlock.html
         TODO: I did not dig deeper yet in the structure
@@ -161,8 +256,8 @@ class BedrockSystemContentBlock(BaseModel):
         image: Any
         text: Any
 
-    cachePoint: BedrockCachePointBlock | None = None
-    guardContent: BedrockGuardrailConverseContentBlock | None = None
+    cachePoint: CachePointBlock | None = None
+    guardContent: GuardrailConverseContentBlock | None = None
     system: str | None = None
 
 
@@ -197,7 +292,7 @@ class BedrockToolConfig(BaseModel):
 
             inputSchema: BedrockToolInputSchema
             name: str
-            description: Optional[str] = None
+            description: str | None = None
 
         toolSpec: BedrockToolSpec
 
@@ -210,9 +305,9 @@ class BedrockConverseRequest(BaseModel):
     """
     modelId: str
     messages: list[BedrockMessage]
-    inferenceConfig: Optional[BedrockInferenceConfig] = None
+    inferenceConfig: BedrockInferenceConfig | None = None
     system: BedrockSystemContentBlock
-    toolConfig: Optional[BedrockToolConfig] = None
+    toolConfig: BedrockToolConfig | None = None
 
     @property
     def dump(self) -> dict:
@@ -360,16 +455,16 @@ class BedrockConverseStreamEventResponse(BaseModel):
             toolUse: ToolUseBlockStart | None = None
             toolResult: ToolResultBlockStart | None = None
 
-            def as_block(self) -> BedrockContentBlock:
+            def as_initial_content_block(self) -> BedrockContentBlock:
                 """
                 Returns a BedrockContentBlock
                 """
                 return BedrockContentBlock(
                     document=None,
-                    image=None if self.image is None else BedrockContentBlock.BedrockImage(format=self.image.format, source=BedrockContentBlock.BedrockImage.BedrockImageSource()),
+                    image=None if self.image is None else BedrockContentBlock.Image(format=self.image.format, source=BedrockContentBlock.Image.ImageSource()),
                     text=None,
-                    toolUse=None if self.toolUse is None else BedrockContentBlock.BedrockToolUse(toolUseId=self.toolUse.toolUseId, name=self.toolUse.name, input=dict()),
-                    toolResult=None if self.toolResult else BedrockContentBlock.BedrockToolResult(toolUseId=self.toolResult.toolUseId, status=self.toolResult.status, content=list())
+                    toolUse=None if self.toolUse is None else BedrockContentBlock.ToolUse(toolUseId=self.toolUse.toolUseId, name=self.toolUse.name, input=dict()),
+                    toolResult=None if self.toolResult is None else BedrockContentBlock.ToolResult(toolUseId=self.toolResult.toolUseId, status=self.toolResult.status, content=list())
                 )
     
         start: ContentBlockStart
@@ -391,21 +486,12 @@ class BedrockConverseStreamEventResponse(BaseModel):
                 """
                 input: str
 
-                def __add__(self, other: Self) -> Self:
-                    return type(self)(input=self.input+other.input)
-
             class ToolResultBlockDelta(BaseModel):
                 """
                 https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultBlockDelta.html
                 """
-                json: str | None = None
+                json: dict | None = None
                 text: str | None = None
-
-                def __add__(self, other: Self) -> Self:
-                    return type(self)(
-                        json=_add_nullables(self.json, other.json, ""),
-                        text=_add_nullables(self.text, other.text, "")
-                    )
             
             class ReasoningContentBlockDelta(BaseModel):
                 """
@@ -414,13 +500,6 @@ class BedrockConverseStreamEventResponse(BaseModel):
                 redactedContent: Base64Bytes | None = None
                 text: str | None = None
                 signature: str | None = None
-
-                def __add__(self, other: Self) -> Self:
-                    return type(self)(
-                        redactedContent=_add_nullables(self.redactedContent, other.redactedContent, b""),
-                        text=_add_nullables(self.text, other.text, ""),
-                        signature=_add_nullables(self.signature, other.signature, ""),
-                    )
             
             class ImageBlockDelta(BaseModel):
                 """
@@ -434,28 +513,23 @@ class BedrockConverseStreamEventResponse(BaseModel):
                     message: str
 
                 error: Any | None = None
-                imageSource: BedrockContentBlock.BedrockImage.BedrockImageSource | None = None
-
-                def __add__(self, other: Self) -> Self:
-                    return type(self)(
-                        error=self.error or other.error,
-                        imageSource=_add_nullables(self.imageSource, other.imageSource, BedrockContentBlock.BedrockImage.BedrockImageSource(bytes=None, s3Location=None)),
-                    )
+                imageSource: BedrockContentBlock.Image.ImageSource | None = None
 
             class CitationDelta(BaseModel):
                 """
                 https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CitationsDelta.html
-
-                TODO: implement this one deeper ?
                 """
-                location: Any | None = None
-                source: str | None = None
-                sourceContent: Any | None = None
-                title: str | None = None
 
-                def __add__(self, other: Self) -> Self:
-                    # TODO : this is a dummy implementation, I do not use this feature
-                    return other
+                class CitationSourceContentDelta(BaseModel):
+                    """
+                    https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CitationSourceContentDelta.html
+                    """
+                    text: str | None = None
+
+                location: BedrockContentBlock.CitationsContentBlock.Citation.CitationLocation | None = None
+                source: str | None = None
+                sourceContent: CitationSourceContentDelta | None = None
+                title: str | None = None
 
             citation: CitationDelta | None = None
             image: ImageBlockDelta | None = None
