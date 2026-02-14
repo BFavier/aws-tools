@@ -320,7 +320,7 @@ class BedrockConverseResponse(BaseModel):
     https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html#API_runtime_Converse_ResponseElements
     """
 
-    class BedrockTokenUsage(BaseModel):
+    class TokenUsage(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html
         """
@@ -404,7 +404,7 @@ class BedrockConverseResponse(BaseModel):
     metrics: BedrockConverseMetrics
     output: BedrockConverseOutput
     stopReason: Literal["end_turn", "tool_use", "max_tokens", "stop_sequence", "guardrail_intervened", "content_filtered", "malformed_model_output", "malformed_tool_use", "model_context_window_exceeded"]
-    usage: BedrockTokenUsage
+    usage: TokenUsage
     additionalModelResponseFields: dict | None = None
     performanceConfig: BedrockPerformanceConfiguration | None = None
     serviceTier: BedrockServiceTier | None = None
@@ -562,7 +562,7 @@ class BedrockConverseStreamEventResponse(BaseModel):
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStreamMetadataEvent.html
         """
         metrics: BedrockConverseResponse.BedrockConverseMetrics
-        usage: BedrockConverseResponse.BedrockTokenUsage
+        usage: BedrockConverseResponse.TokenUsage
         performanceConfig: Any | None = None
         serviceTier: BedrockConverseResponse.BedrockServiceTier | None = None
         trace: BedrockConverseResponse.BedrockConverseTrace | None = None

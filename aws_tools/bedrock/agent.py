@@ -1,9 +1,8 @@
 from collections import defaultdict
-from typing import Any, Type, TypeVar
+from typing import Any, Type, TypeVar, AsyncIterable
 from pydantic import BaseModel
 from aws_tools.bedrock.converse.client import Bedrock
 from aws_tools.bedrock.converse.entities import BedrockConverseRequest, BedrockConverseResponse, BedrockConverseStreamEventResponse, BedrockToolConfig, BedrockMessage, BedrockContentBlock, BedrockInferenceConfig, BedrockSystemContentBlock
-
 
 
 class AgentTool(BaseModel):
@@ -13,7 +12,7 @@ class AgentTool(BaseModel):
     The arguments to be provided by the LLM must be fields of the class, the description of which is described with pydantic's 'argument = Field(..., description="the tool argument description")'.
     """
 
-    async def __call__(self, **tool_secrets) -> Any:
+    async def __call__(self, **secrets) -> Any:
         """
         Any documentation here is invisible to the LLM.
         The implementation of the actual tool is in the class' __call__ method.
@@ -42,16 +41,14 @@ class Agent:
     """
     Derive this base class agent is an LLM with tools registered
     """
-    tools: dict[str, Type[AgentTool]] = {}
-    tool_config: BedrockToolConfig | None = None
 
     def __init_subclass__(cls, **kwargs):
         """
         Each derived class have a distinct set of 'tools' and 'tool_config' objects
         """
         super().__init_subclass__(**kwargs)
-        cls.tools = {}
-        cls.tool_config = None
+        cls.tools: dict[str, Type[AgentTool]] = {}
+        cls.tool_config: BedrockToolConfig | None = None
 
     def __init__(self, bedrock_client: Bedrock, model_id: str, system_prompt: str | None):
         self.bedrock_client = bedrock_client
@@ -69,39 +66,62 @@ class Agent:
         )
         return new_tool
 
-    async def converse_async(self, conversation_id: str, history: list[BedrockMessage], user_message: BedrockContentBlock, inference_config: BedrockInferenceConfig = BedrockInferenceConfig(), tool_secrets: dict[str, dict]=defaultdict(dict)) -> tuple[list[BedrockMessage], BedrockConverseResponse.BedrockTokenUsage]:
+    async def converse_async(self, history: list[BedrockMessage], inference_config: BedrockInferenceConfig = BedrockInferenceConfig(), tool_secrets: dict[str, dict]=defaultdict(dict)) -> tuple[list[BedrockMessage], BedrockConverseResponse.TokenUsage]:
         """
         Returns a response from the LLM.
         """
         inference_config = inference_config.model_copy()
-        total_token_usage = BedrockConverseResponse.BedrockTokenUsage(inputTokens=0, outputTokens=0, totalTokens=0)
-        response_messages = []
+        token_usage = BedrockConverseResponse.TokenUsage(inputTokens=0, outputTokens=0, totalTokens=0)
+        new_messages = 0
         while True:
-            response = await self._agent_turn_async(history+response_messages, inference_config)
-            response_messages.append(response.output.message)
-            total_token_usage += response.usage
+            payload = BedrockConverseRequest(
+                modelId=self.model_id,
+                messages=history,
+                inferenceConfig=inference_config,
+                system=BedrockSystemContentBlock(system=self.system_prompt),
+                toolConfig=self.tool_config
+            )
+            response = await self.bedrock_client.converse_async(payload)
+            new_messages+=1;history.append(response.output.message)
+            token_usage += response.usage
             tool_uses = [block.toolUse for block in response.output.message.content if block.toolUse is not None]
             if inference_config.maxTokens is not None:
                 inference_config.maxTokens -= response.usage.outputTokens
             if len(tool_uses) == 0 or (inference_config is not None and inference_config.maxTokens <= 0):
                 break
-            response_messages.append(BedrockMessage(role="user", content=[BedrockContentBlock(toolResult=self._call_tool_async(tool, tool_secrets)) for tool in tool_uses]))
-        history.extend(response_messages)
-        return response_messages, total_token_usage
+            new_messages+=1;history.append(BedrockMessage(role="user", content=[BedrockContentBlock(toolResult=self._call_tool_async(tool, tool_secrets)) for tool in tool_uses]))
+        return history[-new_messages:], token_usage
 
-    async def _agent_turn_async(self, history: list[BedrockMessage], inference_config: BedrockInferenceConfig) -> BedrockConverseResponse:
+    async def converse_stream(self, history: list[BedrockMessage], inference_config: BedrockInferenceConfig = BedrockInferenceConfig(), tool_secrets: dict[str, dict]=defaultdict(dict)) -> AsyncIterable[BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta, BedrockConverseResponse.TokenUsage]:
         """
+        Stream the response from the LLM, then finally yield the total token usage
         """
-        payload = BedrockConverseRequest(
-            modelId=self.model_id,
-            inferenceConfig=inference_config,
-            system=BedrockSystemContentBlock(system=self.system_prompt),
-            toolConfig=self.tool_config
-        )
-        return await self.bedrock_client.converse_async(payload)
+        inference_config = inference_config.model_copy()
+        token_usage = BedrockConverseResponse.TokenUsage(inputTokens=0, outputTokens=0, totalTokens=0)
+        while True:
+            payload = BedrockConverseRequest(
+                modelId=self.model_id,
+                messages=history,
+                inferenceConfig=inference_config,
+                system=BedrockSystemContentBlock(system=self.system_prompt),
+                toolConfig=self.tool_config
+            )
+            async for event in self.bedrock_client.converse_stream(payload):
+                if isinstance(event, BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta):
+                    yield event
+            history.append(event.output.message)
+            token_usage += event.usage
+            tool_uses = [block.toolUse for block in event.output.message.content if block.toolUse is not None]
+            if inference_config.maxTokens is not None:
+                inference_config.maxTokens -= event.usage.outputTokens
+            if len(tool_uses) == 0 or (inference_config is not None and inference_config.maxTokens <= 0):
+                break
+            history.append(BedrockMessage(role="user", content=[BedrockContentBlock(toolResult=self._call_tool_async(tool, tool_secrets)) for tool in tool_uses]))
+        yield token_usage 
 
     async def _call_tool_async(self, tool_use: BedrockContentBlock.ToolUse, tool_secrets: dict[str, dict]) -> BedrockContentBlock.ToolResult:
         """
+        Call the request tool and return the tool result object
         """
         try:
             Tool = self.tools[tool_use.name]
