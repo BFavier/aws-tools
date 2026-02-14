@@ -24,9 +24,9 @@ class TestBedrock(unittest.TestCase):
                             messages=[BedrockMessage(role="user", content=[BedrockContentBlock(text="Hello, how is it going ?")])],
                             inferenceConfig=BedrockInferenceConfig(maxTokens=100)
                         )):
-                    print(event.model_dump())
+                    pass
                 assert isinstance(event, BedrockConverseResponse)
-            asyncio.run(test_converse_stream())
+        asyncio.run(test_converse_stream())
 
 if __name__ == "__main__":
     unittest.main()

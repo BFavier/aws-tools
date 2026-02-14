@@ -39,10 +39,12 @@ class Bedrock:
         Stream the LLM text answer to a request, then finally yield the complete response object
         """
         response = await self._client.converse_stream(**payload.model_dump(mode="json", exclude_none=True, by_alias=True))
-        message_start = BedrockConverseStreamEventResponse.MessageStartEvent(role="assistant")
+        message_start: BedrockConverseStreamEventResponse.MessageStartEvent | None = None
         block_content_by_index: dict[int, BedrockContentBlock] = {}
+        block_delta_by_index: dict[int, list[BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta]] = {}
         message_stop: BedrockConverseStreamEventResponse.MessageStopEvent | None = None
         metadata: BedrockConverseStreamEventResponse.Metadata | None = None
+        # loop on events
         async for event in response["stream"]:
             content = BedrockConverseStreamEventResponse(**event).content()
             if isinstance(content, BedrockConverseStreamEventResponse.MessageStartEvent):
@@ -52,19 +54,24 @@ class Bedrock:
             elif isinstance(content, BedrockConverseStreamEventResponse.ContentBlockDeltaEvent):
                 if content.delta.text is not None:
                     yield content.delta
-                block_content_by_index[content.contentBlockIndex] += content.delta
+                block_delta_by_index.setdefault(content.contentBlockIndex, list()).append(content.delta)
             elif isinstance(content, BedrockConverseStreamEventResponse.Metadata):
                 metadata = content
             elif isinstance(content, BedrockConverseStreamEventResponse.MessageStopEvent):
                 message_stop = content
             else:
-                asyncio.sleep(0.0)
+                await asyncio.sleep(0.0)
+        # aggregate all the nlobks delta
+        for i, block in block_content_by_index.items():
+            for delta in block_delta_by_index[i]:
+                block += delta
+        # yield the final response and exit
         yield BedrockConverseResponse(
             metrics=metadata.metrics,
             output=BedrockConverseResponse.BedrockConverseOutput(
                 message=BedrockMessage(
                     role=message_start.role,
-                    content=[block for i, block in sorted(block_content_by_index.items())]
+                    content=[block for _, block in sorted(block_content_by_index.items())]
                 )
             ),
             stopReason=message_stop.stopReason,
