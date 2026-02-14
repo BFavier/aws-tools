@@ -32,17 +32,17 @@ class Bedrock:
         await self.close()
 
     async def converse_async(self, payload: BedrockConverseRequest) -> BedrockConverseResponse:
-        return BedrockConverseResponse(**await self._client.converse(**payload.model_dump(mode="json", exclude_none=True)))
+        return BedrockConverseResponse(**await self._client.converse(**payload.model_dump(mode="json", exclude_none=True, by_alias=True)))
 
-    async def converse_stream(self, payload: BedrockConverseRequest) -> AsyncIterable[str | BedrockConverseResponse]:
+    async def converse_stream(self, payload: BedrockConverseRequest) -> AsyncIterable[BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta | BedrockConverseResponse]:
         """
         Stream the LLM text answer to a request, then finally yield the complete response object
         """
-        response = await self._client.converse_stream(**payload.model_dump(mode="json", exclude_none=True))
+        response = await self._client.converse_stream(**payload.model_dump(mode="json", exclude_none=True, by_alias=True))
         message_start = BedrockConverseStreamEventResponse.MessageStartEvent(role="assistant")
         block_content_by_index: dict[int, BedrockContentBlock] = {}
-        message_stop = BedrockConverseStreamEventResponse.MessageStopEvent | None = None
-        metadata = BedrockConverseStreamEventResponse.Metadata | None = None
+        message_stop: BedrockConverseStreamEventResponse.MessageStopEvent | None = None
+        metadata: BedrockConverseStreamEventResponse.Metadata | None = None
         async for event in response["stream"]:
             content = BedrockConverseStreamEventResponse(**event).content()
             if isinstance(content, BedrockConverseStreamEventResponse.MessageStartEvent):

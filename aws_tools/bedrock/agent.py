@@ -100,7 +100,7 @@ class Agent:
         )
         return await self.bedrock_client.converse_async(payload)
 
-    async def _call_tool_async(self, tool_use: BedrockContentBlock.BedrockToolUse, tool_secrets: dict[str, dict]) -> BedrockContentBlock.BedrockToolResult:
+    async def _call_tool_async(self, tool_use: BedrockContentBlock.ToolUse, tool_secrets: dict[str, dict]) -> BedrockContentBlock.ToolResult:
         """
         """
         try:
@@ -108,17 +108,17 @@ class Agent:
             tool = Tool(**tool_use.input)
             result = await tool(**tool_secrets[tool_use.name])
         except Exception as e:
-            return BedrockContentBlock.BedrockToolResult(
+            return BedrockContentBlock.ToolResult(
                 content=[
-                    BedrockContentBlock.BedrockToolResult.BedrockToolResultContent(json={})
+                    BedrockContentBlock.ToolResult.ToolResultContent(json={"error_type": type(e).__name__, "error_value": str(e)})
                 ],
                 toolUseId=tool_use.toolUseId,
                 status="error"
             )
         else:
-            return BedrockContentBlock.BedrockToolResult(
+            return BedrockContentBlock.ToolResult(
                 content=[
-                    BedrockContentBlock.BedrockToolResult.BedrockToolResultContent(json={"result": result})
+                    BedrockContentBlock.ToolResult.ToolResultContent(json={"result": result})
                 ],
                 toolUseId=tool_use.toolUseId,
                 status="success"

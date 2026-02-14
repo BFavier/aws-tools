@@ -1,7 +1,7 @@
 import json
 from base64 import b64decode, b64encode
 from json.decoder import JSONDecodeError
-from typing import Literal, Any, Annotated, TypeVar, Self
+from typing import Literal, Any, Annotated, TypeVar, Self, Union
 from pydantic import BaseModel, Field, BeforeValidator, SerializerFunctionWrapHandler, SerializationInfo
 from pydantic.functional_serializers import WrapSerializer
 
@@ -19,7 +19,7 @@ def base64_serializer(value: bytes, handler: SerializerFunctionWrapHandler, info
 A = TypeVar("A")
 
 
-def _add_nullables(x: A | None, y: A | None, zero: A=A()) -> A | None:
+def _add_nullables(x: A | None, y: A | None, zero: A) -> A | None:
     """
     Sum two nullable objects
     """
@@ -66,7 +66,7 @@ class BedrockContentBlock(BaseModel):
             """
 
             bytes: Base64Bytes | None = None
-            s3Location: "BedrockContentBlock.S3Location" | None = None
+            s3Location: Union["BedrockContentBlock.S3Location", None] = None
             text: str | None = None
 
         name: str
@@ -83,10 +83,7 @@ class BedrockContentBlock(BaseModel):
             https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ImageSource.html
             """
             bytes: Base64Bytes | None = None
-            s3Location: "BedrockContentBlock.S3Location" | None = None
-
-            def __add__(self, other: Self) -> Self:
-                return type(self)(bytes=_add_nullables(self.bytes, other.bytes), s3Location=_add_nullables(self.s3Location, other.s3Location))
+            s3Location: Union["BedrockContentBlock.S3Location", None] = None
 
         format: Literal["png", "jpeg", "gif", "webp"]
         source: ImageSource
@@ -121,10 +118,10 @@ class BedrockContentBlock(BaseModel):
             """
             https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultContentBlock.html
             """
-            json: dict | None = None
+            json_: dict | None = Field(None, alias="json")
             text: str | None = None
-            document: "BedrockContentBlock.DocumentBlock" | None = None
-            image: "BedrockContentBlock.Image" | None = None
+            document: Union["BedrockContentBlock.DocumentBlock", None] = None
+            image: Union["BedrockContentBlock.Image", None] = None
 
         content: list[ToolResultContent]
         toolUseId: str
@@ -306,7 +303,7 @@ class BedrockConverseRequest(BaseModel):
     modelId: str
     messages: list[BedrockMessage]
     inferenceConfig: BedrockInferenceConfig | None = None
-    system: BedrockSystemContentBlock
+    system: BedrockSystemContentBlock | None = None
     toolConfig: BedrockToolConfig | None = None
 
     @property
@@ -490,7 +487,7 @@ class BedrockConverseStreamEventResponse(BaseModel):
                 """
                 https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultBlockDelta.html
                 """
-                json: dict | None = None
+                json_: dict | None = Field(None, alias="json")
                 text: str | None = None
             
             class ReasoningContentBlockDelta(BaseModel):
