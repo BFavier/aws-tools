@@ -102,7 +102,7 @@ class BedrockContentBlock(BaseModel):
         toolUseId: str
 
         def __iadd__(self, other: "BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta.ToolUseBlockDelta") -> Self:
-            self.input = (self.input + other.input)
+            self.input = _add_nullables(self.input, other.input, "")
             try:
                 self.input = json.loads(self.input)
             except JSONDecodeError as e:
@@ -222,8 +222,8 @@ class BedrockContentBlock(BaseModel):
             self.citationsContent.content = _add_nullables(self.citationsContent.content, other.text, "")
         elif self.image is not None:
             self.image += other.image
-        elif self.reasoning is not None:
-            self.reasoning += other.reasoning
+        elif self.reasoningContent is not None:
+            self.reasoningContent += other.reasoning
         elif self.toolResult is not None:
             self.toolResult += other.toolResult
         elif self.toolUse is not None:
@@ -242,7 +242,7 @@ class BedrockSystemContentBlock(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CachePointBlock.html
         """
-        type: Literal["default"]
+        type: Literal["default"] = "type"
         ttl: Literal["5m", "1h"] | None = None
     
     class GuardrailConverseContentBlock(BaseModel):
@@ -446,7 +446,7 @@ class BedrockConverseStreamEventResponse(BaseModel):
                 """
                 name: str
                 toolUseId: str
-                type: Literal["server_tool_use"]
+                type: Literal["server_tool_use"] = "server_tool_use"
 
             image: ImageBlockStart | None = None
             toolUse: ToolUseBlockStart | None = None
@@ -460,7 +460,7 @@ class BedrockConverseStreamEventResponse(BaseModel):
                     document=None,
                     image=None if self.image is None else BedrockContentBlock.Image(format=self.image.format, source=BedrockContentBlock.Image.ImageSource()),
                     text=None,
-                    toolUse=None if self.toolUse is None else BedrockContentBlock.ToolUse(toolUseId=self.toolUse.toolUseId, name=self.toolUse.name, input=dict()),
+                    toolUse=None if self.toolUse is None else BedrockContentBlock.ToolUse(toolUseId=self.toolUse.toolUseId, name=self.toolUse.name, input=None),
                     toolResult=None if self.toolResult is None else BedrockContentBlock.ToolResult(toolUseId=self.toolResult.toolUseId, status=self.toolResult.status, content=list())
                 )
     

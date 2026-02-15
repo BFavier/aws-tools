@@ -1,7 +1,9 @@
+import re
 import sys
 import asyncio
 import aiohttp
 import streamlit as st
+from unidecode import unidecode
 from streamlit.web import cli as stcli
 from streamlit import runtime
 from aws_tools.bedrock import BedrockMessage, BedrockInferenceConfig, BedrockContentBlock
@@ -62,11 +64,14 @@ def main():
                 with st.chat_message(name=message.role):
                     st.write(content.text)
 
-    input = st.chat_input(accept_file=True)
-    if input is not None:
+    chat_input_container = st.chat_input(accept_file="multiple", file_type=["png", "jpg", "pdf", "txt", "md", "doc", "docx"])
+    if chat_input_container is not None:
         with st.chat_message(name="user"):
-            st.session_state.history.append(BedrockMessage(role="user", content=[BedrockContentBlock(text=input)]))
-            st.write(input)
+            st.write(chat_input_container.text)
+        content = [BedrockContentBlock(text=chat_input_container.text)]
+        for file in chat_input_container.files:
+            content.append(BedrockContentBlock(document=BedrockContentBlock.DocumentBlock(name=re.sub(r"[^a-zA-Z0-9\s\-\(\)\[\]]", "_", unidecode(file.name)), source=BedrockContentBlock.DocumentBlock.DocumentSource(bytes=file.getvalue()), format=file.type.split("/")[-1])))
+        st.session_state.history.append(BedrockMessage(role="user", content=content))
         with st.chat_message(name="assistant"):
             placeholder = st.empty()
         asyncio.run(converse_with_agent_async(placeholder))

@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Any, Type, TypeVar, AsyncIterable
 from pydantic import BaseModel
-from aws_tools.bedrock.converse.client import Bedrock
+from aws_tools.bedrock.client import Bedrock
 from aws_tools.bedrock.converse.entities import BedrockConverseRequest, BedrockConverseResponse, BedrockConverseStreamEventResponse, ToolConfig, BedrockMessage, BedrockContentBlock, BedrockInferenceConfig, BedrockSystemContentBlock
 
 
@@ -61,7 +61,7 @@ class Agent:
         A decorator to apply on top of new tool to register into an agent class
         """
         cls.tools[new_tool.__name__] = new_tool
-        cls.bedrock_tool_config = ToolConfig(
+        cls.tool_config = ToolConfig(
             tools=[T.definition() for T in cls.tools.values()]
         )
         return new_tool
@@ -116,7 +116,7 @@ class Agent:
                 inference_config.maxTokens -= event.usage.outputTokens
             if len(tool_uses) == 0 or (inference_config is not None and inference_config.maxTokens <= 0):
                 break
-            history.append(BedrockMessage(role="user", content=[BedrockContentBlock(toolResult=self._call_tool_async(tool, tool_secrets)) for tool in tool_uses]))
+            history.append(BedrockMessage(role="user", content=[BedrockContentBlock(toolResult=await self._call_tool_async(tool, tool_secrets)) for tool in tool_uses]))
         yield token_usage 
 
     async def _call_tool_async(self, tool_use: BedrockContentBlock.ToolUse, tool_secrets: dict[str, dict]) -> BedrockContentBlock.ToolResult:
