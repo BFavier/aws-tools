@@ -4,8 +4,7 @@ import aiohttp
 import streamlit as st
 from streamlit.web import cli as stcli
 from streamlit import runtime
-from aws_tools.bedrock import Bedrock, BedrockMessage, BedrockInferenceConfig, BedrockContentBlock, BedrockConverseStreamEventResponse, BedrockSystemContentBlock
-from aws_tools.bedrock.agent import Agent, AgentTool
+from aws_tools.bedrock import BedrockMessage, BedrockInferenceConfig, BedrockContentBlock
 
 def main():
 
@@ -63,7 +62,7 @@ def main():
                 with st.chat_message(name=message.role):
                     st.write(content.text)
 
-    input = st.chat_input()
+    input = st.chat_input(accept_file=True)
     if input is not None:
         with st.chat_message(name="user"):
             st.session_state.history.append(BedrockMessage(role="user", content=[BedrockContentBlock(text=input)]))
