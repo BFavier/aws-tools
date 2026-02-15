@@ -25,8 +25,7 @@ class GetWebPageContent(AgentTool):
     async def __call__(self, http: aiohttp.ClientSession) -> str:
         async with http.get(self.url) as response:
             response.raise_for_status()
-            res = convert(html=await response.text(), options=ConversionOptions())
-            print(res)
+            res = convert(html=await response.text(), options=ConversionOptions(skip_images=True, extract_metadata=False))
             return res
 
 
