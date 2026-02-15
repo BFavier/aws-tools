@@ -32,6 +32,7 @@ def main():
                     buffer += line_bytes.decode("utf-8")
                     text = line_bytes.decode("utf-8")
                     placeholder.markdown(buffer)
+        st.session_state.history.append(BedrockMessage(role="assistant", content=[BedrockContentBlock(text=buffer)]))
 
 
     if "history" not in st.session_state:
@@ -41,11 +42,13 @@ def main():
 
     with st.sidebar:
         model_id = st.text_input("Model ID", value="anthropic.claude-3-haiku-20240307-v1:0")
-        if model_id is not None:
+        if "model_id" not in st.session_state or st.session_state.model_id != model_id:
             asyncio.run(set_model_id_async(model_id))
+            st.session_state.model_id = model_id
         system_prompt = st.text_input("System prompt", value="You are an helpful agent that speaks with cool slangs, in a relaxed atmosphere.")
-        if system_prompt is not None:
+        if "system_prompt" not in st.session_state or st.session_state.system_prompt != system_prompt:
             asyncio.run(set_system_prompt_async(system_prompt))
+            st.session_state.system_prompt = system_prompt
         max_tokens = st.number_input("Max tokens", value=1_000)
         if max_tokens is not None:
             st.session_state.inference_config.maxTokens = max_tokens
