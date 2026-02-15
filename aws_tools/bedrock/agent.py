@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Any, Type, TypeVar, AsyncIterable
 from pydantic import BaseModel
 from aws_tools.bedrock.converse.client import Bedrock
-from aws_tools.bedrock.converse.entities import BedrockConverseRequest, BedrockConverseResponse, BedrockConverseStreamEventResponse, BedrockToolConfig, BedrockMessage, BedrockContentBlock, BedrockInferenceConfig, BedrockSystemContentBlock
+from aws_tools.bedrock.converse.entities import BedrockConverseRequest, BedrockConverseResponse, BedrockConverseStreamEventResponse, ToolConfig, BedrockMessage, BedrockContentBlock, BedrockInferenceConfig, BedrockSystemContentBlock
 
 
 class AgentTool(BaseModel):
@@ -22,15 +22,15 @@ class AgentTool(BaseModel):
         raise NotImplementedError()
     
     @classmethod
-    def definition(cls) -> BedrockToolConfig.BedrockTool:
+    def definition(cls) -> ToolConfig.Tool:
         """
         """
-        return BedrockToolConfig.BedrockTool(
-            toolSpec=BedrockToolConfig.BedrockTool.BedrockToolSpec(
-                inputSchema=cls.model_json_schema()
-            ),
-            name=cls.__name__,
-            description="\n".join(s.strip() for s in cls.__doc__.split("\n") if len(s.strip()) > 0) if cls.__doc__ is not None else None
+        return ToolConfig.Tool(
+            toolSpec=ToolConfig.Tool.ToolSpec(
+                inputSchema=ToolConfig.Tool.ToolSpec.ToolInputSchema(json=cls.model_json_schema()),
+                name=cls.__name__,
+                description="\n".join(s.strip() for s in cls.__doc__.split("\n") if len(s.strip()) > 0) if cls.__doc__ is not None else None
+            )
         )
 
 
@@ -48,9 +48,9 @@ class Agent:
         """
         super().__init_subclass__(**kwargs)
         cls.tools: dict[str, Type[AgentTool]] = {}
-        cls.tool_config: BedrockToolConfig | None = None
+        cls.tool_config: ToolConfig | None = None
 
-    def __init__(self, bedrock_client: Bedrock, model_id: str, system_prompt: str | None):
+    def __init__(self, bedrock_client: Bedrock, model_id: str, system_prompt: str | None = None):
         self.bedrock_client = bedrock_client
         self.model_id = model_id
         self.system_prompt = system_prompt
@@ -61,7 +61,7 @@ class Agent:
         A decorator to apply on top of new tool to register into an agent class
         """
         cls.tools[new_tool.__name__] = new_tool
-        cls.bedrock_tool_config = BedrockToolConfig(
+        cls.bedrock_tool_config = ToolConfig(
             tools=[T.definition() for T in cls.tools.values()]
         )
         return new_tool
@@ -78,7 +78,7 @@ class Agent:
                 modelId=self.model_id,
                 messages=history,
                 inferenceConfig=inference_config,
-                system=BedrockSystemContentBlock(system=self.system_prompt),
+                system=[BedrockSystemContentBlock(text=self.system_prompt)] if self.system_prompt is not None else None,
                 toolConfig=self.tool_config
             )
             response = await self.bedrock_client.converse_async(payload)
@@ -92,7 +92,7 @@ class Agent:
             new_messages+=1;history.append(BedrockMessage(role="user", content=[BedrockContentBlock(toolResult=self._call_tool_async(tool, tool_secrets)) for tool in tool_uses]))
         return history[-new_messages:], token_usage
 
-    async def converse_stream(self, history: list[BedrockMessage], inference_config: BedrockInferenceConfig = BedrockInferenceConfig(), tool_secrets: dict[str, dict]=defaultdict(dict)) -> AsyncIterable[BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta, BedrockConverseResponse.TokenUsage]:
+    async def converse_stream(self, history: list[BedrockMessage], inference_config: BedrockInferenceConfig = BedrockInferenceConfig(), tool_secrets: dict[str, dict]=defaultdict(dict)) -> AsyncIterable[BedrockConverseStreamEventResponse.ContentBlockDeltaEvent.ContentBlockDelta | BedrockConverseResponse.TokenUsage]:
         """
         Stream the response from the LLM, then finally yield the total token usage
         """
@@ -103,7 +103,7 @@ class Agent:
                 modelId=self.model_id,
                 messages=history,
                 inferenceConfig=inference_config,
-                system=BedrockSystemContentBlock(system=self.system_prompt),
+                system=[BedrockSystemContentBlock(text=self.system_prompt)] if self.system_prompt is not None else None,
                 toolConfig=self.tool_config
             )
             async for event in self.bedrock_client.converse_stream(payload):

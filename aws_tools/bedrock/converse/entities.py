@@ -255,7 +255,7 @@ class BedrockSystemContentBlock(BaseModel):
 
     cachePoint: CachePointBlock | None = None
     guardContent: GuardrailConverseContentBlock | None = None
-    system: str | None = None
+    text: str | None = None
 
 
 class BedrockMessage(BaseModel):
@@ -266,34 +266,34 @@ class BedrockMessage(BaseModel):
     content: list[BedrockContentBlock]
 
 
-class BedrockToolConfig(BaseModel):
+class ToolConfig(BaseModel):
     """
     https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolConfiguration.html
     """
 
-    class BedrockTool(BaseModel):
+    class Tool(BaseModel):
         """
         https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Tool.html
         """
 
-        class BedrockToolSpec(BaseModel):
+        class ToolSpec(BaseModel):
             """
             https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolSpecification.html
             """
 
-            class BedrockToolInputSchema(BaseModel):
+            class ToolInputSchema(BaseModel):
                 """
                 https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolInputSchema.html
                 """
                 json_: dict = Field(..., alias="json")  # JSON schema
 
-            inputSchema: BedrockToolInputSchema
+            inputSchema: ToolInputSchema
             name: str
             description: str | None = None
 
-        toolSpec: BedrockToolSpec
+        toolSpec: ToolSpec
 
-    tools: list[BedrockTool]
+    tools: list[Tool]
 
 
 class BedrockConverseRequest(BaseModel):
@@ -303,8 +303,8 @@ class BedrockConverseRequest(BaseModel):
     modelId: str
     messages: list[BedrockMessage]
     inferenceConfig: BedrockInferenceConfig | None = None
-    system: BedrockSystemContentBlock | None = None
-    toolConfig: BedrockToolConfig | None = None
+    system: list[BedrockSystemContentBlock] | None = None
+    toolConfig: ToolConfig | None = None
 
     @property
     def dump(self) -> dict:
