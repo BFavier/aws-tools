@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from datetime import datetime, UTC, timedelta
 
 
-def generate_self_signed_cert(common_name: str = u"self-signed", key_size=2048) -> tuple[x509.Certificate, rsa.RSAPrivateKey]:
+def generate_self_signed_cert(common_name: str = u"self-signed", key_size=2048, ip_addresses: list[str] = []) -> tuple[x509.Certificate, rsa.RSAPrivateKey]:
     """
     generates a self-signed TLS certificate for the the provided IPv4 or IPv6 adresses,
     and the rsa private key used for signing the certificate
@@ -34,7 +34,7 @@ def generate_self_signed_cert(common_name: str = u"self-signed", key_size=2048) 
     san_list: list[x509.GeneralName] = [
         x509.DNSName("localhost"),
         x509.IPAddress(ipaddress.ip_address("127.0.0.1"))
-    ]
+    ] + [x509.IPAddress(ipaddress.ip_address(ip_address)) for ip_address in ip_addresses]
     cert_builder = cert_builder.add_extension(
         x509.SubjectAlternativeName(san_list),
         critical=False
