@@ -742,7 +742,7 @@ class Table(Awaitable["Table"]):
                 UpdateExpression=expression,
                 ExpressionAttributeValues=attribute_values,
                 ExpressionAttributeNames=attribute_names,
-                ReturnValues=f"UPDATED_{return_object}" if return_object else "NONE",  # Return the updated values after setting
+                ReturnValues=f"ALL_{return_object}" if return_object else "NONE",  # Return the updated values after setting
                 **kwargs
                 )
         except ClientError as e:
