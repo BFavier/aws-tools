@@ -10,8 +10,9 @@ class TestJWT(unittest.TestCase):
         private = RSAPrivateKey.generate(key_size=2048)
         public = private.public_key()
         data = {"hello": "world"}
-        jwt = JsonWebToken.generate(data, None, encryption=private)
+        jwt = JsonWebToken.generate(data, validity_seconds=1_000, encryption=private)
         jwt2 = JsonWebToken.load(jwt.dump())
+        assert jwt == jwt2
         assert jwt2.signature_is_valid(public)
         assert not jwt2.expired()
         assert jwt2.payload.data == data

@@ -1,9 +1,9 @@
 import json
 import hashlib
 import base64
-from typing import Literal, TypeVar, Generic
-from datetime import datetime, UTC
-from pydantic import BaseModel
+from typing import Literal, TypeVar, Generic, Annotated
+from datetime import datetime, timedelta, UTC
+from pydantic import BaseModel, field_validator, field_serializer
 from datetime import datetime, UTC
 from security_tools.rsa import RSAPrivateKey, RSAPublicKey
 
@@ -27,8 +27,23 @@ class JsonWebToken(BaseModel, Generic[T]):
         """
         Message stored in JWT
         """
-        iat: int
-        exp: int | None
+
+        @field_validator("iat", "exp", mode="before")
+        def int_to_datetime(cls, v: int | None) -> datetime | None:
+            if v is None:
+                return None
+            if isinstance(v, int):
+                return datetime.fromtimestamp(v, tz=UTC)
+            return v
+
+        @field_serializer("iat", "exp")
+        def datetime_to_int(self, dt: datetime | None) -> int | None:
+            if dt is None:
+                return None
+            return int(dt.timestamp())
+
+        iat: Annotated[datetime, "issued-at timestamp"]
+        exp: Annotated[datetime | None, "expires timestamp"]
         data: T
 
     header: Header
@@ -58,13 +73,13 @@ class JsonWebToken(BaseModel, Generic[T]):
         """
         Generate and sign a JWT
         """
-        now = int(datetime.now(UTC).timestamp())
+        now = datetime.now(UTC).replace(microsecond=0)
         if isinstance(encryption, RSAPrivateKey):
             alg = "RS256"
         else:
             raise ValueError("Unexpected encryption key type")
         header = JsonWebToken.Header(alg=alg, typ="JWT")
-        payload = cls.Payload(iat=now, exp=None if validity_seconds is None else now+validity_seconds, data=data)
+        payload = cls.Payload(iat=now, exp=None if validity_seconds is None else now+timedelta(seconds=validity_seconds), data=data)
         return JsonWebToken(
             header=header,
             payload=payload,
@@ -72,7 +87,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         )
 
     @classmethod
-    def load(cls, string: str) -> "JsonWebToken":
+    def load(cls, string: str) -> "JsonWebToken[T]":
         """
         Load a JWT from a dump
         """
@@ -96,7 +111,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         if self.payload.exp is None:
             return False
         else:
-            return int(datetime.now(UTC).timestamp()) > self.payload.exp
+            return datetime.now(UTC) > self.payload.exp
 
     def signature_is_valid(self, decryption_key: RSAPublicKey) -> bool:
         """
