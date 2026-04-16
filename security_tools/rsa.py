@@ -30,7 +30,7 @@ class RSAPrivateKey:
         )
 
     def sign(self, message: bytes) -> bytes:
-        return self.key.sign(message, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
+        return self.key.sign(message, padding.PKCS1v15(), hashes.SHA256())
 
     def decrypt(self, message: bytes) -> bytes:
         assert len(message) == (self.size // 8)
@@ -83,7 +83,7 @@ class RSAPublicKey:
 
     def signature_is_valid(self, message: bytes, signature: bytes) -> bool:
         try:
-            self.key.verify(signature, message, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
+            self.key.verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
         except InvalidSignature:
             return False
         else:

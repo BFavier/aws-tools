@@ -1,5 +1,4 @@
 import json
-import hashlib
 import base64
 from typing import Literal, TypeVar, Generic, Annotated
 from datetime import datetime, timedelta, UTC
@@ -50,30 +49,44 @@ class JsonWebToken(BaseModel, Generic[T]):
     payload: Payload[T]
     signature: str
 
-    @staticmethod
-    def _hash(payload: Payload) -> bytes:
+    @classmethod
+    def _part_fingerprint(cls, obj: BaseModel) -> str:
         """
-        Return the payload's hash
+        Returns the fingerprint of one part of the JWT
         """
-        return hashlib.sha256(payload.model_dump_json().encode()).digest()
-
+        return cls._urlsafe_b64encode(json.dumps(obj.model_dump(mode="json"), sort_keys=True).encode())
 
     @classmethod
-    def _sign(cls, payload: Payload, encryption: RSAPrivateKey) -> bytes:
+    def _fingerprint(cls, header: Header, payload: Payload) -> str:
+        """
+        Return the JWT's fingerprint (to be signed)
+        """
+        return (cls._part_fingerprint(header) + "." + cls._part_fingerprint(payload))
+
+    @classmethod
+    def _sign(cls, header: Header, payload: Payload, encryption: RSAPrivateKey) -> bytes:
         """
         Sign the given message
         """
         if isinstance(encryption, RSAPrivateKey):
-            return encryption.sign(cls._hash(payload))
+            return encryption.sign(cls._fingerprint(header, payload).encode())
         else:
             raise ValueError(f"Alg type is not yet suported")
 
-    @classmethod
-    def _restore_padding(cls, base64_encoded: str) -> str:
+    @staticmethod
+    def _urlsafe_b64encode(input: bytes) -> str:
         """
-        Restore stripped "=" padding in an urlsafe base64 encoded string
+        urlsafe base64 encode
         """
-        return base64_encoded + "=" * (-len(base64_encoded) % 4)
+        return base64.urlsafe_b64encode(input).rstrip(b"=").decode()
+
+    @staticmethod
+    def _urlsafe_b64decode(output: str) -> bytes:
+        """
+        urlsafe base64 decode
+        """
+        output = output + "=" * (-len(output) % 4)
+        return base64.urlsafe_b64decode(output)
 
     @classmethod
     def generate(cls, data: T, validity_seconds: int | None, encryption: RSAPrivateKey) -> "JsonWebToken[T]":
@@ -90,7 +103,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         return JsonWebToken(
             header=header,
             payload=payload,
-            signature=base64.urlsafe_b64encode(cls._sign(payload, encryption)).rstrip(b"=").decode()
+            signature=cls._urlsafe_b64encode(cls._sign(header, payload, encryption))
         )
 
     @classmethod
@@ -99,15 +112,15 @@ class JsonWebToken(BaseModel, Generic[T]):
         Load a JWT from a dump
         """
         header, payload, signature = string.split(".")
-        header = JsonWebToken.Header(**json.loads(base64.urlsafe_b64decode(cls._restore_padding(header).encode()).decode()))
-        payload = JsonWebToken.Payload[T](**json.loads(base64.urlsafe_b64decode(cls._restore_padding(payload).encode()).decode()))
+        header = JsonWebToken.Header(**json.loads(cls._urlsafe_b64decode(header).decode()))
+        payload = JsonWebToken.Payload[T](**json.loads(cls._urlsafe_b64decode(payload).decode()))
         return JsonWebToken(header=header, payload=payload, signature=signature)
 
     def dump(self) -> str:
         """
         """
-        x = base64.urlsafe_b64encode(self.header.model_dump_json().encode()).rstrip(b"=").decode()
-        y = base64.urlsafe_b64encode(self.payload.model_dump_json().encode()).rstrip(b"=").decode()
+        x = self._part_fingerprint(self.header)
+        y = self._part_fingerprint(self.payload)
         z = self.signature
         return f"{x}.{y}.{z}"
 
@@ -124,4 +137,4 @@ class JsonWebToken(BaseModel, Generic[T]):
         """
         Returns whether the JWT signature is valid
         """
-        return decryption_key.signature_is_valid(self._hash(self.payload), base64.urlsafe_b64decode(self._restore_padding(self.signature).encode()))
+        return decryption_key.signature_is_valid(self._fingerprint(self.header, self.payload).encode(), self._urlsafe_b64decode(self.signature))
