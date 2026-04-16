@@ -83,7 +83,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         return JsonWebToken(
             header=header,
             payload=payload,
-            signature=base64.b64encode(cls._sign(payload, encryption)).decode()
+            signature=base64.urlsafe_b64encode(cls._sign(payload, encryption)).decode()
         )
 
     @classmethod
@@ -92,15 +92,15 @@ class JsonWebToken(BaseModel, Generic[T]):
         Load a JWT from a dump
         """
         header, payload, signature = string.split(".")
-        header = JsonWebToken.Header(**json.loads(base64.b64decode(header.encode()).decode()))
-        payload = JsonWebToken.Payload[T](**json.loads(base64.b64decode(payload.encode()).decode()))
+        header = JsonWebToken.Header(**json.loads(base64.urlsafe_b64decode(header.encode()).decode()))
+        payload = JsonWebToken.Payload[T](**json.loads(base64.urlsafe_b64decode(payload.encode()).decode()))
         return JsonWebToken(header=header, payload=payload, signature=signature)
 
     def dump(self) -> str:
         """
         """
-        x = base64.b64encode(self.header.model_dump_json().encode()).decode()
-        y = base64.b64encode(self.payload.model_dump_json().encode()).decode()
+        x = base64.urlsafe_b64encode(self.header.model_dump_json().encode()).decode()
+        y = base64.urlsafe_b64encode(self.payload.model_dump_json().encode()).decode()
         z = self.signature
         return f"{x}.{y}.{z}"
 
@@ -117,4 +117,4 @@ class JsonWebToken(BaseModel, Generic[T]):
         """
         Returns whether the JWT signature is valid
         """
-        return decryption_key.signature_is_valid(self._hash(self.payload), base64.b64decode(self.signature.encode()))
+        return decryption_key.signature_is_valid(self._hash(self.payload), base64.urlsafe_b64decode(self.signature.encode()))
