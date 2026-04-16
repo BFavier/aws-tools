@@ -107,13 +107,15 @@ class JsonWebToken(BaseModel, Generic[T]):
         )
 
     @classmethod
-    def load(cls, string: str) -> "JsonWebToken[T]":
+    def load(cls, string: str, payload_data_type: type[T] | None = None) -> "JsonWebToken[T]":
         """
         Load a JWT from a dump
         """
         header, payload, signature = string.split(".")
         header = JsonWebToken.Header(**json.loads(cls._urlsafe_b64decode(header).decode()))
         payload = JsonWebToken.Payload[T](**json.loads(cls._urlsafe_b64decode(payload).decode()))
+        if payload_data_type is not None:
+            payload.data = payload_data_type(**payload.data)
         return JsonWebToken(header=header, payload=payload, signature=signature)
 
     def dump(self) -> str:
