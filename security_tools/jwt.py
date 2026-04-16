@@ -69,6 +69,13 @@ class JsonWebToken(BaseModel, Generic[T]):
             raise ValueError(f"Alg type is not yet suported")
 
     @classmethod
+    def _restore_padding(cls, base64_encoded: str) -> str:
+        """
+        Restore stripped "=" padding in an urlsafe base64 encoded string
+        """
+        return base64_encoded + "=" * (-len(base64_encoded) % 4)
+
+    @classmethod
     def generate(cls, data: T, validity_seconds: int | None, encryption: RSAPrivateKey) -> "JsonWebToken[T]":
         """
         Generate and sign a JWT
@@ -83,7 +90,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         return JsonWebToken(
             header=header,
             payload=payload,
-            signature=base64.urlsafe_b64encode(cls._sign(payload, encryption)).decode()
+            signature=base64.urlsafe_b64encode(cls._sign(payload, encryption)).rstrip(b"=").decode()
         )
 
     @classmethod
@@ -92,15 +99,15 @@ class JsonWebToken(BaseModel, Generic[T]):
         Load a JWT from a dump
         """
         header, payload, signature = string.split(".")
-        header = JsonWebToken.Header(**json.loads(base64.urlsafe_b64decode(header.encode()).decode()))
-        payload = JsonWebToken.Payload[T](**json.loads(base64.urlsafe_b64decode(payload.encode()).decode()))
+        header = JsonWebToken.Header(**json.loads(base64.urlsafe_b64decode(cls._restore_padding(header).encode()).decode()))
+        payload = JsonWebToken.Payload[T](**json.loads(base64.urlsafe_b64decode(cls._restore_padding(payload).encode()).decode()))
         return JsonWebToken(header=header, payload=payload, signature=signature)
 
     def dump(self) -> str:
         """
         """
-        x = base64.urlsafe_b64encode(self.header.model_dump_json().encode()).decode()
-        y = base64.urlsafe_b64encode(self.payload.model_dump_json().encode()).decode()
+        x = base64.urlsafe_b64encode(self.header.model_dump_json().encode()).rstrip(b"=").decode()
+        y = base64.urlsafe_b64encode(self.payload.model_dump_json().encode()).rstrip(b"=").decode()
         z = self.signature
         return f"{x}.{y}.{z}"
 
@@ -117,4 +124,4 @@ class JsonWebToken(BaseModel, Generic[T]):
         """
         Returns whether the JWT signature is valid
         """
-        return decryption_key.signature_is_valid(self._hash(self.payload), base64.urlsafe_b64decode(self.signature.encode()))
+        return decryption_key.signature_is_valid(self._hash(self.payload), base64.urlsafe_b64decode(self._restore_padding(self.signature).encode()))
