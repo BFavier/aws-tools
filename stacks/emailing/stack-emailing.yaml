@@ -483,5 +483,9 @@ Resources:
 Outputs:
   SESConfigurationSet:
     Value: !Ref SESConfigurationSet
+    Export:
+          Name: SESConfigurationSet
   SESEmailRecipients:
-    Value: !Ref Recipients
+    Value: !Join [",", !Ref Recipients]
+    Export:
+      Name: SESEmailRecipients
