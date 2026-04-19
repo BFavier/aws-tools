@@ -299,6 +299,7 @@ Resources:
           import boto3
           import os
           import email
+          from email.utils import getaddresses
           from datetime import datetime, UTC
 
           s3 = boto3.client("s3")
@@ -318,7 +319,7 @@ Resources:
                   msg = email.message_from_bytes(raw_email)
 
                   # Extract recipient(s) from headers
-                  recipients = msg.get_all("To", [])
+                  recipients = [email for name, email in getaddresses(msg.get_all("To", []))]
                   if not recipients:
                       print("No recipients found, skipping.")
                       continue
@@ -327,7 +328,7 @@ Resources:
                   now = datetime.now(UTC)
 
                   for recipient in recipients:
-                      recipient_clean = recipient.strip().lower().replace("<", "").replace(">", "")
+                      recipient_clean = recipient.strip().lower()
 
                       # Build new S3 key: recipient/yyyy/mm/dd/messageId.eml
                       message_id = f"{now.isoformat()}-{key.split('/')[-1]}"
