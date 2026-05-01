@@ -21,28 +21,24 @@ Parameters:
     Default: ''
   CpuUnits:
     Type: Number
-    Description: CPU resources allocated to each docker container running the service (1024 CPU units = 1 cpu core)
+    Description: CPU resources allocated to the task (1024 CPU units = 1 cpu core).
     Default: '256'
   MemoryMiB:
     Type: Number
-    Description: Memory resources allocated to each docker container running the service (in MiB)
+    Description: Memory resources allocated in total to the task (in MiB)
     Default: '512'
   FargateDiskSpaceGiB:
     Type: Number
-    Description: Disk space in GiB. Only used for FARGATE tasks. Must be between 20 and 200.
+    Description: Disk space in GiB. No effect for EC2 clustertypes. Must be between 20 and 200.
     Default: '20'
   SidecarDockerImage:
     Type: String
     Description: The image for the optional sidecar container, or empty to disable.
     Default: ""
-  SidecarCpuUnits:
-    Type: Number
-    Description: CPU units for the sidecar
-    Default: '0'
-  SidecarMemoryMiB:
-    Type: Number
-    Description: Memory (MiB) for the sidecar
-    Default: '0'
+  SharedVolumePath:
+    Type: String
+    Description: The path to a mounted disk volume that is shared between main image and sidecar
+    Default: "/mnt/shared"
 
   EnvironmentFile:
     Type: String
@@ -61,7 +57,7 @@ Conditions:
   FargateClusterType: !Equals [!Ref ClusterType, 'FARGATE']
   DefaultFargateDiskSpaceGiB: !Equals [!Ref FargateDiskSpaceGiB, 20]
   SpecifyStorage: !And
-    - !Not [!Condition FargateClusterType]
+    - [!Condition FargateClusterType]
     - !Not [!Condition DefaultFargateDiskSpaceGiB]
 
 Resources:
@@ -94,6 +90,13 @@ Resources:
             Resource: "*"
           - Effect: Allow
             Action:
+              - ecr-public:GetAuthorizationToken
+              - ecr-public:BatchGetImage
+              - ecr-public:GetRepositoryPolicy
+              - ecr-public:DescribeImages
+            Resource: "*"
+          - Effect: Allow
+            Action:
               - ecr:GetAuthorizationToken
             Resource: "*"
           - Effect: Allow
@@ -111,10 +114,6 @@ Resources:
           - Effect: Allow
             Principal:
               Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns: 
         - !Ref DefaultRunnerPolicy
@@ -138,6 +137,9 @@ Resources:
             - !Ref AWS::NoValue
             - Type: s3
               Value: !Ref EnvironmentFile
+          MountPoints:
+            - SourceVolume: shared-data
+              ContainerPath: !Ref SharedVolumePath
           Essential: true
           PortMappings:
             - ContainerPort: 80
@@ -152,8 +154,14 @@ Resources:
           - HasSideCar
           - Name: "Sidecar"
             Image: !Ref SidecarDockerImage
-            Cpu: !Ref SidecarCpuUnits
-            Memory: !Ref SidecarMemoryMiB
+            EnvironmentFiles: !If
+            - NotHasEnvFile
+            - !Ref AWS::NoValue
+            - Type: s3
+              Value: !Ref EnvironmentFile
+            MountPoints:
+              - SourceVolume: shared-data
+                ContainerPath: !Ref SharedVolumePath
             Essential: true
             PortMappings:
               - ContainerPort: 80
@@ -163,16 +171,18 @@ Resources:
               Options:
                 awslogs-group: !Ref ECSLogGroup
                 awslogs-region: !Ref AWS::Region
-                awslogs-stream-prefix: !Sub ${TaskFamily}-Sidecare
+                awslogs-stream-prefix: !Sub ${TaskFamily}-Sidecar
           - AWS::NoValue
       Cpu: !Ref CpuUnits
       Memory: !Ref MemoryMiB
       EphemeralStorage: !If
         - SpecifyStorage
-        - SizeInGiB: FargateDiskSpaceGiB
+        - SizeInGiB: !Ref FargateDiskSpaceGiB
         - !Ref AWS::NoValue
       RequiresCompatibilities:
         - !Ref ClusterType
+      Volumes:
+        - Name: shared-data
       NetworkMode: !If [ FargateClusterType, awsvpc, host ]
       TaskRoleArn: !Ref RunnerRole
       ExecutionRoleArn: !Ref ExecutionRole
