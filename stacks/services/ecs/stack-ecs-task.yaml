@@ -17,7 +17,7 @@ Parameters:
 
   EntryPoint:
     Type: String
-    Description: The docker run --entrypoint argument, as a comma delimited list (example 'python,-m,package.entryoint.py'), or empty string to keep default
+    Description: The docker run --entrypoint argument, as a comma delimited list (example 'python,-m,package.entrypoint.py'), or empty string to keep default
     Default: ''
   CpuUnits:
     Type: Number
@@ -29,8 +29,21 @@ Parameters:
     Default: '512'
   FargateDiskSpaceGiB:
     Type: Number
-    Description: Disk space in GiB. Only valid for FARGATE tasks. Must be between 20 and 200.
+    Description: Disk space in GiB. Only used for FARGATE tasks. Must be between 20 and 200.
     Default: '20'
+  SidecarDockerImage:
+    Type: String
+    Description: The image for the optional sidecar container, or empty to disable.
+    Default: ""
+  SidecarCpuUnits:
+    Type: Number
+    Description: CPU units for the sidecar
+    Default: '0'
+  SidecarMemoryMiB:
+    Type: Number
+    Description: Memory (MiB) for the sidecar
+    Default: '0'
+
   EnvironmentFile:
     Type: String
     Description: The s3 uri (s3://.../variables.env) of .env file containing env variables definitions (MY_ENV=VALUE). They must be read accessible from the runner role.
@@ -41,6 +54,7 @@ Parameters:
     Default: ''
 
 Conditions:
+  HasSidecar: !Not [ !Equals [ "", !Ref SidecarDockerImage ] ]
   NotHasPolicy: !Equals ['', !Ref RunerRolePolicyArn]
   NotHasEnvFile: !Equals ['', !Ref EnvironmentFile]
   NotHasEntryPoint: !Equals ['', !Ref EntryPoint]
@@ -66,6 +80,7 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
   DefaultRunnerPolicy:
     Type: AWS::IAM::ManagedPolicy
+    Condition: NotHasPolicy
     Properties:
       ManagedPolicyName: !Sub ${AWS::StackName}-DefaultRunnerPolicy
       PolicyDocument:
@@ -77,6 +92,15 @@ Resources:
               - logs:CreateLogStream
               - logs:PutLogEvents
             Resource: "*"
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+            Resource: !Sub arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/*
   RunnerRole:  # this is the role endorsed from the docker image that runs the entrypoint
     Type: AWS::IAM::Role
     Properties:
@@ -103,7 +127,7 @@ Resources:
     Properties:
       Family: !Ref TaskFamily
       ContainerDefinitions:
-        - Name: !Ref TaskFamily
+        - Name: "MainImage"
           Image: !Ref DockerImage
           EntryPoint: !If
             - NotHasEntryPoint
@@ -114,17 +138,33 @@ Resources:
             - !Ref AWS::NoValue
             - Type: s3
               Value: !Ref EnvironmentFile
-          Cpu: !Ref CpuUnits
-          Memory: !Ref MemoryMiB
           Essential: true
           PortMappings:
             - ContainerPort: 80
+            - ContainerPort: 443
           LogConfiguration:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref ECSLogGroup
               awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: !Sub ${AWS::StackName}-Task
+              awslogs-stream-prefix: !Sub ${TaskFamily}-MainImage
+        - !If
+          - HasSideCar
+          - Name: "Sidecar"
+            Image: !Ref SidecarDockerImage
+            Cpu: !Ref SidecarCpuUnits
+            Memory: !Ref SidecarMemoryMiB
+            Essential: true
+            PortMappings:
+              - ContainerPort: 80
+              - ContainerPort: 443
+            LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group: !Ref ECSLogGroup
+                awslogs-region: !Ref AWS::Region
+                awslogs-stream-prefix: !Sub ${TaskFamily}-Sidecare
+          - AWS::NoValue
       Cpu: !Ref CpuUnits
       Memory: !Ref MemoryMiB
       EphemeralStorage: !If
