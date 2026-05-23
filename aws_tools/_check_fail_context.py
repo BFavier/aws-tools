@@ -1,10 +1,13 @@
+from typing import Type
+
+
 class check_fail:
     """
     Context that exit silently at the first error.
     If there was no error on leaving the context, raise one.
     """
 
-    def __init__(self, exception_type: type[Exception] = Exception):
+    def __init__(self, exception_type: Type[Exception] = Exception):
         self.exception_type = exception_type
 
     def __enter__(self):

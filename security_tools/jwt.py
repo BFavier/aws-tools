@@ -1,6 +1,6 @@
 import json
 import base64
-from typing import Literal, TypeVar, Generic, Annotated
+from typing import Literal, TypeVar, Generic, Annotated, Type
 from datetime import datetime, timedelta, UTC
 from pydantic import BaseModel, field_validator, field_serializer
 from datetime import datetime, UTC
@@ -107,7 +107,7 @@ class JsonWebToken(BaseModel, Generic[T]):
         )
 
     @classmethod
-    def load(cls, string: str, payload_data_type: type[T] | None = None) -> "JsonWebToken[T]":
+    def load(cls, string: str, payload_data_type: Type[T] | None = None) -> "JsonWebToken[T]":
         """
         Load a JWT from a dump
         """

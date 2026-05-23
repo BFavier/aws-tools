@@ -1,6 +1,7 @@
 import os
 import tempfile
 import ipaddress
+from typing import Type
 from types import TracebackType
 from datetime import datetime, UTC
 from dataclasses import dataclass
@@ -85,7 +86,7 @@ class SelfSignedCertificate:
         cert_file.close()
         return CertKeyPair(cert_path=cert_file.name, private_key_path=key_file.name)
 
-    def __exit__(self, type_: type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None) -> bool | None:
+    def __exit__(self, type_: Type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None) -> bool | None:
         # Delete the temp files, ignore if already removed
         for f in [self.cert_file, self.key_file]:
             try:
