@@ -23,6 +23,7 @@ Parameters:
   EventsQueueArn:
     Type: String
     Description: 'Ignored if an empty string is passed. The SQS queue in which a message is sent on email event.'
+    Default: ""
 
 Conditions:
   EventsWebhookEnabled: !Not [!Equals [!Ref EventsWebhookUrl, ""]]
