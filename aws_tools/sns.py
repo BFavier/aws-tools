@@ -11,7 +11,7 @@ from cryptography.x509 import load_pem_x509_certificate, Certificate
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 from urllib.parse import urlparse
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from typing import Literal, Annotated, Union
 
 
@@ -24,7 +24,7 @@ HEADERS = [
 ]
 
 
-class SNSEvent(BaseModel):
+class _SNSEvent(BaseModel):
     """
     Base class for SNS events
     """
@@ -38,7 +38,7 @@ class SNSEvent(BaseModel):
     SigningCertURL: Annotated[str, "https://sns.us-west-2.amazonaws.com/SimpleNotificationService-f3ecfb7224c7233fe7bb5f59f96de52f.pem"]
 
 
-class SNSSubscriptionConfirmationRequest(SNSEvent):
+class SNSSubscriptionConfirmationRequest(_SNSEvent):
     """
     https://docs.aws.amazon.com/sns/latest/dg/http-subscription-confirmation-json.html
     """
@@ -47,7 +47,7 @@ class SNSSubscriptionConfirmationRequest(SNSEvent):
     SubscribeURL: Annotated[str, ""]
 
 
-class SNSNotificationRequest(SNSEvent):
+class SNSNotificationRequest(_SNSEvent):
     """
     https://docs.aws.amazon.com/sns/latest/dg/http-notification-json.html
     """
@@ -55,7 +55,7 @@ class SNSNotificationRequest(SNSEvent):
     Subject: Annotated[str, "My First Message"] | None = None
 
 
-class SNSUnsubscribeRequest(SNSEvent):
+class SNSUnsubscribeRequest(_SNSEvent):
     """
     https://docs.aws.amazon.com/sns/latest/dg/http-unsubscribe-confirmation-json.html
     """
@@ -65,11 +65,20 @@ class SNSUnsubscribeRequest(SNSEvent):
 
 
 SNSEventsTypes = Union[SNSSubscriptionConfirmationRequest, SNSNotificationRequest, SNSUnsubscribeRequest]
-assert set(SNSEvent.__subclasses__()) == set(SNSEventsTypes.__args__)
+assert set(_SNSEvent.__subclasses__()) == set(SNSEventsTypes.__args__)
+
+
+def SNSEvent(payload: dict) -> SNSEventsTypes:
+    """
+    Load an SNSEvent object, with type matching
+    """
+    return TypeAdapter(SNSEventsTypes).validate_python(payload)
 
 
 class SimpleNotificationService:
     """
+    An async client for AWS SNS
+
     >>> sns = SimpleNotificationService()
     >>> await sns.open()
     >>> ...
@@ -107,9 +116,9 @@ class SimpleNotificationService:
 
     async def send_sms_async(self, phone_number: str, message: str):
         """
-        Send a sms
+        Send an SMS to the given phone number (phone number must be in E.164 format)
         """
-        await self.client.publish(
+        await self._client.publish(
             PhoneNumber=phone_number,
             Message=message
         )

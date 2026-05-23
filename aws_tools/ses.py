@@ -15,6 +15,8 @@ from email.mime.application import MIMEApplication
 
 class SimpleEmailingService:
     """
+    An async client for AWS SES
+
     >>> ses = SimpleEmailingService()
     >>> await ses.open()
     >>> ...
