@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Defines a service that runs on an ECS cluster, with a load balancer in front
+Description: Defines an ECS cluster
 
 Parameters:
   VpcId:
@@ -43,10 +43,20 @@ Parameters:
     Type: String
     Description: The IP and CIDR block authorization filter on ingress rules (excepted for ssh rule)
     Default: '0.0.0.0/0'
+  FailureNotificationQueueArn:
+    Type: String
+    Default: ""
+    Description: "ARN of the SQS queue to receive ECS task failure notifications. Leave empty to disable."
+  FailureNotificationUrl:
+    Type: String
+    Default: ""
+    Description: "HTTP/HTTPS endpoint's url to receive SNS-signed notifications on ECS task failure, as a plain text request. See 'aws_tools.sns.SimpleNotificationService' to verify the signature, and 'aws_tools.sns.EventNotification' to load the plain text payload."
 
 Conditions:
   HasSSHKeyName: !Not [!Equals ['', !Ref SSHKeyName]]
   IsEc2Cluster: !Equals ['ec2', !Ref ClusterType]
+  HasFailureQueue: !Not [!Equals ['', !Ref FailureNotificationQueueArn]]
+  HasFailureUrl: !Not [!Equals ['', !Ref FailureNotificationUrl]]
 
 Resources:
   ECSInstanceRole:
@@ -160,6 +170,58 @@ Resources:
           - CapacityProvider: !Ref CapacityProvider
             Weight: 1
         - !Ref AWS::NoValue
+  # notify queue on task failures
+  ECSFailureQueueRule:
+    Type: AWS::Events::Rule
+    Condition: HasFailureQueue
+    Properties:
+      Name: !Sub "${AWS::StackName}-ECSFailedTaskRule"
+      Description: Triggers on failed ECS tasks
+      EventPattern:
+        source:
+          - "aws.ecs"
+        detail-type:
+          - "ECS Task State Change"
+        detail:
+          clusterArn:
+            - !GetAtt ECSCluster.Arn
+          lastStatus:
+            - "STOPPED"
+      Targets:
+        - Arn: !Ref FailureNotificationQueueArn
+          Id: ECSFailureQueueNotification
+  # notify sns→url on task failures
+  ECSFailureUrlSNSTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasFailureUrl
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-ECSFailureTopic"
+  ECSFailureSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasFailureUrl
+    Properties:
+      Protocol: !Select [0, !Split [":", !Ref FailureNotificationUrl]]  # https or http depending on the provided url
+      Endpoint: !Ref FailureNotificationUrl
+      TopicArn: !Ref ECSFailureUrlSNSTopic
+  ECSFailureUrlRule:
+    Type: AWS::Events::Rule
+    Condition: HasFailureUrl
+    Properties:
+      Name: !Sub "${AWS::StackName}-ECSFailedTaskRule"
+      Description: "Triggers on failed ECS tasks"
+      EventPattern:
+        source:
+          - "aws.ecs"
+        detail-type:
+          - "ECS Task State Change"
+        detail:
+          lastStatus:
+            - "STOPPED"
+          clusterArn:
+            - !GetAtt ECSCluster.Arn
+      Targets:
+        - Arn: !Ref ECSFailureUrlSNSTopic
+          Id: ECSFailureSnsNotification
 
 Outputs:
   ClusterName:
