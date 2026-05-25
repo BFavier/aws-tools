@@ -134,7 +134,7 @@ class S3:
             prefix: str | pathlib.Path="",
             recursive: bool=True,
             page_start_token: str | None = None,
-            max_page_size: int = 1_000,
+            max_page_size: int = 100,
         ) -> tuple[list[tuple[str, int]], str | None]:
         """
         Return objects key and bytes size in a paginated fashion

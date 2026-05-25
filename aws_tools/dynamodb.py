@@ -373,6 +373,8 @@ class Table(Awaitable["Table"]):
         Get several items at once.
         Yield None for items that do not exist.
         """
+        if chunk_size > 100:
+            raise ValueError(f"Argument 'chunk_size' must not be greater than 100 as per dynamodb limitation. got {chunk_size}.")
         serializer = TypeSerializer()
         deserializer = TypeDeserializer()
         keys_to_process = ({k: item[k] for k in self.keys.values()} for item in keys_or_items)
@@ -451,7 +453,7 @@ class Table(Awaitable["Table"]):
             self,
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
-            page_size: int | None = 1_000,
+            page_size: int | None = 100,
             page_start_token: str | None = None,
             consistent_read: bool=False,
         ) -> tuple[list[dict], str | None]:
@@ -506,7 +508,7 @@ class Table(Awaitable["Table"]):
                 self,
                 conditions: ConditionBase | None = None,
                 subset: list[str] | None = None,
-                page_size: int | None = 1_000,
+                page_size: int | None = 100,
                 consistent_read: bool=False,
             ) -> AsyncIterable[dict]:
         """
@@ -534,7 +536,7 @@ class Table(Awaitable["Table"]):
             ascending: bool=True,
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
-            page_size: int | None = 1_000,
+            page_size: int | None = 100,
             consistent_read: bool=False,
         ) -> tuple[list[dict], str | None]:
         """
@@ -620,7 +622,7 @@ class Table(Awaitable["Table"]):
             ascending: bool=True,
             conditions: ConditionBase | None = None,
             subset: list[str] | None = None,
-            page_size: int | None = 1_000,
+            page_size: int | None = 100,
             consistent_read: bool = False,
         ) -> AsyncIterable[dict]:
         """
