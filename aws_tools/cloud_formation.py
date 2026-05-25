@@ -57,7 +57,7 @@ class CloudFormation:
         return stack_names
 
 
-    async def get_stack_outputs_async(self, stack: str | None = None) -> dict:
+    async def get_stack_outputs_async(self, stack: str | None = None) -> dict[str, str]:
         """
         Returns the exported stack outputs. Or all the outputs of all stacks
         """
