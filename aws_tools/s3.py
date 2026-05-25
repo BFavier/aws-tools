@@ -132,6 +132,7 @@ class S3:
             self,
             bucket_name: str,
             prefix: str | pathlib.Path="",
+            recursive: bool=True,
             page_start_token: str | None = None,
             max_page_size: int = 1_000,
         ) -> tuple[list[tuple[str, int]], str | None]:
@@ -144,11 +145,14 @@ class S3:
         pagination_config = {"PageSize": max_page_size}
         if page_start_token:
             pagination_config["StartingToken"] = page_start_token
-        async for page in paginator.paginate(
+        kwargs = dict(
             Bucket=bucket_name,
             Prefix=prefix,
             PaginationConfig=pagination_config,
-        ):
+        )
+        if not recursive:
+            kwargs["Delimiter"] = "/"
+        async for page in paginator.paginate(**kwargs):
             objects = [
                 (obj["Key"], obj["Size"])
                 for obj in page.get("Contents", [])
