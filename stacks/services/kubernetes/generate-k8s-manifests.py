@@ -1,8 +1,17 @@
 import pathlib
-from aws_tools.synchrone.cloud_formation import get_stack_outputs
+import asyncio
+from aws_tools.cloud_formation import CloudFormation
 
 path = pathlib.Path(__file__).parent
-outputs = get_stack_outputs()
+
+
+async def get_stack_outputs() -> dict[str, str]:
+    async with CloudFormation() as cf: 
+        res = await cf.get_stack_outputs_async()
+    return res
+
+
+outputs = asyncio.run(get_stack_outputs())
 
 content = {
     "k8s-webapp.yaml":
@@ -64,22 +73,32 @@ spec:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 50
 ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-path-routing
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /  # replace the '/prefix' by '/' when redirecting
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: webapp-service
+            port:
+              number: 80
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: webapp-service
   namespace: webapp-namespace
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-name: "k8s-webapp-load-balancer"  # Name of the load balancer
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"  # Use "alb" for ALB
-    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing  # Use "internal" for internal load balancer
-    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip  # Use "instance" for EC2 instances
-    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: {outputs["CertificateArn"]}
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"  # Backend communicates over HTTP
-    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"  # Load balancer listens on port 443 for HTTPS
-    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/"  # Health check path
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: webapp-pod
   ports:
@@ -90,7 +109,7 @@ spec:
   - name: https
     protocol: TCP
     port: 443
-    targetPort: 80  # Redirects to the same backend port
+    targetPort: 443
 """,
 #################################################################
     "k8s-autoscaler.yaml":
