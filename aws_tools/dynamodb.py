@@ -688,7 +688,7 @@ class Table(Awaitable["Table"]):
             Several nested paths can't be created at once.
             If False, raise an error if the item does not exist.
         conditions : boto3.dynamodb.conditions.ConditionBase or None
-            The conditions to be met
+            The conditions to be met. If the condition is not met, the function always returns None, even if return_object is not None.
         return_object : "OLD", "NEW" or None
             If not None, the function return the subset of the item containing the updated fields. (values before update if "OLD", values after update if "NEW")
 
