@@ -1,5 +1,6 @@
 import os
 import pathlib
+import asyncio
 import aioboto3
 from urllib.parse import urlparse
 from typing import Iterable, Callable, Optional, AsyncIterable
@@ -265,6 +266,16 @@ class S3:
             else:
                 raise
         return await response["Body"].read()
+    
+    
+    async def batch_download_data_async(self, bucket_name: str, keys: list[str | pathlib.Path], batch_size: int=5) -> list[bytes | None]:
+        """
+        download all the keys by batches of 'batch_size' requests at once
+        """
+        results = []
+        for i in range(0, len(keys), batch_size):
+            results.extend(await asyncio.gather(*[self.download_data_async(bucket_name, key) for key in keys[i:i+batch_size]]))
+        return results
 
 
     async def stream_data_async(self, bucket_name: str, key: str | pathlib.Path, chunk_size: int = 8192) -> AsyncIterable[bytes]:
