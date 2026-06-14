@@ -1,24 +1,14 @@
 import aioboto3
 from operator import __and__
 from datetime import datetime, UTC
-from typing import Literal, ClassVar, Iterable, AsyncIterable, AsyncGenerator, Generator, Awaitable, Any
-from pydantic import BaseModel, Field, ConfigDict
-from pydantic.alias_generators import to_camel
+from typing import Literal, AsyncIterable
+from pydantic import Field
+from aws_tools._snake_base_model import _SnakeBaseModel
 
 
 CpuArchitecture = Literal["i386", "x86_64", "arm64", "x86_64_mac", "arm64_mac"]
 InstanceState = Literal["pending", "running", "shutting-down", "terminated", "stopping", "stopped"]
 InstanceLifecycle = Literal["spot", "scheduled", "capacity-block", "interruptible-capacity-reservation"]
-
-
-class _SnakeBaseModel(BaseModel):
-    """
-    Handle converting camel case to snake case
-    """
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
 
 
 class Ec2InstanceDescription(_SnakeBaseModel):
@@ -37,7 +27,7 @@ class Ec2InstanceDescription(_SnakeBaseModel):
         """
         State of an EC2 instance
         """
-        code: str
+        code: int
         name: InstanceState
 
     class SecurityGroup(_SnakeBaseModel):
@@ -71,17 +61,17 @@ class Ec2InstanceDescription(_SnakeBaseModel):
             delete_on_termination: bool
             status: Literal["attaching", "attached", "detaching", "detached"]
             volume_id: str
-            associated_resource: str
-            volume_owner_id: str
-            operator: Operator
-            ebs_card_index: int
+            associated_resource: str | None = None
+            volume_owner_id: str | None = None
+            operator: Operator | None = None
+            ebs_card_index: int | None = None
 
         device_name: str
         ebs: Ebs
 
     instance_id: str
     instance_type: str = Field(description="The EC2 naming of the instance type", examples=["m5.xlarge"])
-    instance_lifecycle: InstanceLifecycle
+    instance_lifecycle: InstanceLifecycle | None = None
     state: State
     launch_time: datetime
     image_id: str
@@ -89,11 +79,11 @@ class Ec2InstanceDescription(_SnakeBaseModel):
     subnet_id: str
     security_groups: list[SecurityGroup]
     private_ip_address: str
-    public_ip_address: str
-    tags: list[Tag]
-    iam_instance_profile: IamInstanceProfile
-    block_device_appings: list[BlockDeviceMapping]
-    cpu_architecture: CpuArchitecture
+    public_ip_address: str | None = None
+    tags: list[Tag] | None = None
+    iam_instance_profile: IamInstanceProfile | None = None
+    block_device_mappings: list[BlockDeviceMapping]
+    architecture: CpuArchitecture
 
 
 class Ec2InstanceType(_SnakeBaseModel):
@@ -104,22 +94,22 @@ class Ec2InstanceType(_SnakeBaseModel):
 
     class ProcessorInfo(_SnakeBaseModel):
         supported_architectures: list[CpuArchitecture]
-        sustained_clock_speed_in_ghz: float
+        sustained_clock_speed_in_ghz: float | None = None
         manufacturer: str
 
     class VCpuInfo(_SnakeBaseModel):
-        default_v_cpus: int | float
+        default_vcpus: int | float = Field(alias="DefaultVCpus")
         default_cores: int
         default_threads_per_core: int
-        valid_cores: list[int]
-        valid_thread_per_core: list[int]
+        valid_cores: list[int] | None = None
+        valid_threads_per_core: list[int] | None = None
 
     class MemoryInfo(_SnakeBaseModel):
-        size_in_miB: int
+        size_in_MiB: int = Field(alias="SizeInMiB")
     
     class InstanceStorageInfo(_SnakeBaseModel):
-        total_size_in_gb: int
-    
+        total_size_in_GiB: int = Field(alias="TotalSizeInGB")
+
     class NetworkInfo(_SnakeBaseModel):
 
         class EfaInfo(_SnakeBaseModel):
@@ -130,10 +120,10 @@ class Ec2InstanceType(_SnakeBaseModel):
         ipv6_supported: bool
         ena_support: Literal["unsupported", "supported", "required"]
         efa_supported: bool
-        efa_info: EfaInfo
-        secondary_network_supported: bool
-        maximum_secondary_network_interfaces: int
-        ipv4_addresses_per_secondary_interface: int
+        efa_info: EfaInfo | None = None
+        secondary_network_supported: bool = False
+        maximum_secondary_network_interfaces: int = 0
+        ipv4_addresses_per_secondary_interface: int = 0
 
     class GpuInfo(_SnakeBaseModel):
 
@@ -141,13 +131,13 @@ class Ec2InstanceType(_SnakeBaseModel):
             name: str
             manufacturer: str
             count: int
-            logical_gpu_count: int
-            gpu_partition_size: float
-            workloads: list[str]
             memory_info: "Ec2InstanceType.MemoryInfo"
+            logical_gpu_count: int | None = None
+            gpu_partition_size: float | None = None
+            workloads: list[str] | None = None
 
         gpus: list[Gpu]
-        total_gpu_memory_in_mib: int
+        total_gpu_memory_in_MiB: int = Field(alias="TotalGpuMemoryInMiB")
 
     instance_type: str = Field(description="The EC2 naming of the instance type", examples=["m5.xlarge"])
     current_generation: bool
@@ -155,11 +145,11 @@ class Ec2InstanceType(_SnakeBaseModel):
     supported_usage_classes: list[Literal["spot", "on-demand", "capacity-block"]]
     bare_metal: bool
     processor_info: ProcessorInfo
-    v_cpu_info: VCpuInfo
+    vcpu_info: VCpuInfo = Field(alias="VCpuInfo")
     memory_info: MemoryInfo
     instance_storage_supported: bool
     network_info: NetworkInfo
-    gpu_info: GpuInfo
+    gpu_info: GpuInfo | None = None
 
 
 class EC2:
@@ -175,8 +165,8 @@ class EC2:
     >>>     ...
     """
 
-    def __init__(self):
-        self.session = aioboto3.Session()
+    def __init__(self, region_name: str | None = None):
+        self.session = aioboto3.Session(region_name=region_name)
         self._client = None
 
     async def open(self):
@@ -206,37 +196,40 @@ class EC2:
     async def list_instance_types_paginated_async(
             self,
             page_start_token: str | None,
-            instance_types_filter: list[str] | None = None,
-            max_page_size: int = 100,
+            prefixes_filter: list[str] | None = None,
+            max_page_size: int | None = 100,
+            instance_types: list[str] | None = None,
         ) -> tuple[list[Ec2InstanceType], str | None]:
         """
         Returns EC2 instance types in a paginated fashion as tuples of (page, next_page_token)
         """
         kwargs = dict()
-        if instance_types_filter is not None:
+        if instance_types is not None:
+            kwargs["InstanceTypes"] = instance_types
+        if prefixes_filter is not None:
+            assert not isinstance(prefixes_filter, str)
             kwargs.setdefault("Filters", []).append(
                 {
-                    "Name": "instance-type-filter",
-                    "Values": instance_types_filter
+                    "Name": "instance-type",
+                    "Values": [f"{prefix}*" for prefix in prefixes_filter]
                 }
             )
+        if page_start_token is not None:
+            kwargs["NextToken"] = page_start_token
+        if max_page_size is not None:
+            kwargs["MaxResults"] = max_page_size
         response = await self.client.describe_instance_types(
-            MaxResults=max_page_size,
-            NextToken=page_start_token,
             **kwargs
         )
         return [Ec2InstanceType(**it) for it in response["InstanceTypes"]], response.get("NextToken")
 
-    async def list_instance_types_async(
-            self,
-            instance_types_filter: list[str] | None = None
-        ) -> AsyncIterable[Ec2InstanceType]:
+    async def list_instance_types_async(self, prefixes_filter: list[str] | None = None) -> AsyncIterable[Ec2InstanceType]:
         """
         Return an async iterable over the ec2 instance types
         """
-        page_start_token = None
+        next_page_token = None
         while True:
-            page, next_page_token = await self.list_instance_types_paginated_async(page_start_token, instance_types_filter)
+            page, next_page_token = await self.list_instance_types_paginated_async(next_page_token, prefixes_filter=prefixes_filter)
             for it in page:
                 yield it
             if next_page_token is None:
@@ -246,39 +239,32 @@ class EC2:
         """
         Get the properties of an instance type, or return None if not found
         """
-        async for it in self.list_instance_types_async(instance_types_filter=[instance_type]):
-            return it
-        else:
-            return None
+        page, _ = await self.list_instance_types_paginated_async(page_start_token=None, max_page_size=None, instance_types=[instance_type])
+        return page[0]
 
-    async def start_instance_async(
+    async def run_instances_async(
             self,
             instance_type: str,
             image_id: str,
             subnet_id: str,
             security_group_ids: list[str],
-            disk_size_GiB: int,
+            iam_instance_profile_arn: str | None,
+            count: int = 1,
+            public_ip: bool = False,
+            disk_size_GiB: int | None = None,
             user_data_script: str | None = None,
-        ) -> str:
+            ssh_key_name: str | None = None,
+            disable_smt: bool = False,
+        ) -> list[str]:
         """
-        Initiate instance bootup, return it's id
+        Initialize one or several instance, return their IDs
         """
-        # TODO : how to specify cpu architecture ? enable disable Hyper-Threading ? AWS AMI ? IAM role ?
-        response = await self.client.run_instances(
-            ImageId=instance_type,
-            InstanceType=type,
-            MinCount=1,
-            MaxCount=1,
-            UserData=user_data_script,
-            NetworkInterfaces=[
-                {
-                    "AssociatePublicIpAddress": True,
-                    "DeviceIndex": 0,
-                    "SubnetId": subnet_id,
-                    "Groups": security_group_ids,
-                }
-            ],
-            BlockDeviceMappings=[
+        assert len(security_group_ids) > 0
+        kwargs = dict()
+        if ssh_key_name is not None:
+            kwargs["KeyName"] = ssh_key_name
+        if disk_size_GiB is not None:
+            kwargs["BlockDeviceMappings"] = [
                 {
                     "DeviceName": "/dev/xvda",
                     "Ebs": {
@@ -287,22 +273,47 @@ class EC2:
                         "VolumeType": "gp3",
                     },
                 }
+            ]
+        if user_data_script is not None:
+            kwargs["UserData"] = user_data_script
+        if disable_smt:
+            kwargs["CpuOptions"] = {
+                "CoreCount": (await self.get_instance_type_properties_async(instance_type)).vcpu_info.default_cores,
+                "ThreadsPerCore": 1
+            }
+        if iam_instance_profile_arn is not None:
+            kwargs["IamInstanceProfile"] = {
+                "Arn": iam_instance_profile_arn,
+            }
+        response = await self.client.run_instances(
+            ImageId=image_id,
+            InstanceType=instance_type,
+            MinCount=count,
+            MaxCount=count,
+            NetworkInterfaces=[
+                {
+                    "AssociatePublicIpAddress": public_ip,
+                    "DeviceIndex": 0,
+                    "SubnetId": subnet_id,
+                    "Groups": security_group_ids,
+                }
             ],
+            **kwargs
         )
-        return response["Instances"][0]["InstanceId"]
+        return [inst["InstanceId"] for inst in response["Instances"]]
 
     async def list_instances_paginated_async(
             self,
             page_start_token: str | None,
             instance_state_filter: None | list[InstanceState] = None,
-            instance_id_filter: list[str] | None = None,
-            max_page_size: int = 100
+            max_page_size: int | None = 100,
+            instance_ids: list[str] | None = None,
         ) -> tuple[list[Ec2InstanceDescription], str | None]:
         """
         Returns (page, next_page_token) with page a list of running instances
         """
         kwargs = dict()
-        if page_start_token:
+        if page_start_token is not None:
             kwargs["NextToken"] = page_start_token
         if instance_state_filter is not None:
             kwargs.setdefault("Filters", list()).append(
@@ -311,16 +322,12 @@ class EC2:
                     "Values": instance_state_filter,
                 }
             )
-        if instance_id_filter is not None:
-            kwargs.setdefault("Filters", list()).append(
-                {
-                    "Name": "instance-ids",
-                    "Values": instance_id_filter,
-                }
-            )
+        if instance_ids is not None:
+            kwargs["InstanceIds"] =  instance_ids
+        if max_page_size is not None:
+            kwargs["MaxResults"] = max_page_size
         response = await self.client.describe_instances(
-            MaxResults=max_page_size,
-            **kwargs,
+            **kwargs
         )
         page = [
             Ec2InstanceDescription(**instance)
@@ -331,15 +338,14 @@ class EC2:
 
     async def list_instances_async(
             self,
-            instance_state_filter: None | list[InstanceState] = None,
-            instance_id_filter: list[str] | None = None,
+            instance_state_filter: None | list[InstanceState] = None
     ) -> AsyncIterable[Ec2InstanceDescription]:
         """
         Yield instances in an async fashion
         """
         next_page_token = None
         while True:
-            page, next_page_token = await self.list_instances_paginated_async(next_page_token, instance_state_filter, instance_id_filter)
+            page, next_page_token = await self.list_instances_paginated_async(next_page_token, instance_state_filter)
             for description in page:
                 yield description
             if next_page_token is None:
@@ -349,17 +355,15 @@ class EC2:
         """
         Describe an existing instance, or return None if it does not exists
         """
-        async for instance in self.list_instances_async(instance_id_filter=[instance_id]):
-            return instance
-        else:
-            return None
+        page, _ = await self.list_instances_paginated_async(page_start_token=None, max_page_size=None, instance_ids=[instance_id])
+        return page[0]
 
     async def stop_instances_async(self, instance_ids: list[str]):
         """
         Initiate the instance shutdown
         """
         await self.client.stop_instances(
-            InstanceIds=[instance_ids]
+            InstanceIds=instance_ids
         )
 
     async def stop_instance_async(self, instance_id: str):
