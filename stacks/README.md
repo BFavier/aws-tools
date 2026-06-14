@@ -17,7 +17,7 @@ Then clone the repository:
 git clone https://github.com/BFavier/aws-tools.git
 ```
 
-Finally copy the stacks to the bucket (remember to change the name of the bucket here below)
+Finally copy the stacks to the bucket (remember to change the name of the bucket here below - also remove the **--dryrun** once you are confident about the changelog)
 
 ```bash
 aws s3 sync ./aws-tools/stacks/ s3://${MY_STACK_BUCKET} --delete --dryrun

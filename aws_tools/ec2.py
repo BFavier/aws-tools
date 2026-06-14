@@ -80,7 +80,7 @@ class Ec2InstanceDescription(_SnakeBaseModel):
     security_groups: list[SecurityGroup]
     private_ip_address: str
     public_ip_address: str | None = None
-    tags: list[Tag] | None = None
+    tags: list[Tag] = Field(default_factory=list)
     iam_instance_profile: IamInstanceProfile | None = None
     block_device_mappings: list[BlockDeviceMapping]
     architecture: CpuArchitecture
@@ -251,10 +251,11 @@ class EC2:
             iam_instance_profile_arn: str | None,
             count: int = 1,
             public_ip: bool = False,
+            tags: dict[str, str] | None = None,
             disk_size_GiB: int | None = None,
             user_data_script: str | None = None,
             ssh_key_name: str | None = None,
-            disable_smt: bool = False,
+            one_thread_per_core: bool = False,
         ) -> list[str]:
         """
         Initialize one or several instance, return their IDs
@@ -276,7 +277,7 @@ class EC2:
             ]
         if user_data_script is not None:
             kwargs["UserData"] = user_data_script
-        if disable_smt:
+        if one_thread_per_core:
             kwargs["CpuOptions"] = {
                 "CoreCount": (await self.get_instance_type_properties_async(instance_type)).vcpu_info.default_cores,
                 "ThreadsPerCore": 1
@@ -284,6 +285,17 @@ class EC2:
         if iam_instance_profile_arn is not None:
             kwargs["IamInstanceProfile"] = {
                 "Arn": iam_instance_profile_arn,
+            }
+        if tags is not None:
+            kwargs["TagSpecifications"] = {
+                "ResourceType": "instance",
+                "Tags": [
+                    {
+                        "Key": k,
+                        "Value": v
+                    }
+                    for k, v in tags.items()
+                ]
             }
         response = await self.client.run_instances(
             ImageId=image_id,
