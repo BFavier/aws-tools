@@ -204,7 +204,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ecs:RunTask
-                Resource: !GetAtt TaskDefinition.Arn
+                Resource: !Ref TaskDefinition
               - Effect: Allow
                 Action:
                   - iam:PassRole
