@@ -36,23 +36,41 @@ Parameters:
     Description: Whether a public IP should be created
 
 Resources:
+  # MonthlyBillingSchedule:
+  #   Type: AWS::Events::Rule
+  #   Properties:
+  #     Name: MonthlyBillingTask
+  #     ScheduleExpression: !Ref ScheduleExpression
+  #     State: ENABLED
+  #     Targets:
+  #       - Id: RunTask
+  #         Arn: !Sub
+  #           - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
+  #           - ClusterName: !Ref ClusterName
+  #         RoleArn: !Ref EventbridgeTaskStartRoleArn
+  #         EcsParameters:
+  #           TaskDefinitionArn: !Ref TaskDefinitionArn
+  #           LaunchType: !Ref ClusterType
+  #           NetworkConfiguration:
+  #             AwsVpcConfiguration:
+  #               Subnets: !Ref SubnetIds
+  #               SecurityGroups: !Ref SecurityGroupIds
+  #               AssignPublicIp: !Ref AssignPublicIp
   MonthlyBillingSchedule:
-    Type: AWS::Events::Rule
+    Type: AWS::Scheduler::Schedule
     Properties:
       Name: MonthlyBillingTask
+      FlexibleTimeWindow:
+        Mode: "OFF"
       ScheduleExpression: !Ref ScheduleExpression
-      State: ENABLED
-      Targets:
-        - Id: RunTask
-          Arn: !Sub
-            - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
-            - ClusterName: !Ref ClusterName
-          RoleArn: !Ref EventbridgeTaskStartRoleArn
-          EcsParameters:
-            TaskDefinitionArn: !Ref TaskDefinitionArn
-            LaunchType: !Ref ClusterType
-            NetworkConfiguration:
-              AwsVpcConfiguration:
-                Subnets: !Ref SubnetIds
-                SecurityGroups: !Ref SecurityGroupIds
-                AssignPublicIp: !Ref AssignPublicIp
+      Target:
+        Arn: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
+        RoleArn: !Ref EventbridgeTaskStartRoleArn
+        EcsParameters:
+          TaskDefinitionArn: !Ref TaskDefinitionArn
+          LaunchType: !Ref ClusterType
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              Subnets: !Ref SubnetIds
+              SecurityGroups: !Ref SecurityGroupIds
+              AssignPublicIp: !Ref AssignPublicIp

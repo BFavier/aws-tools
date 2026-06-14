@@ -195,7 +195,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: events.amazonaws.com
+              Service: scheduler.amazonaws.com
             Action: sts:AssumeRole
       Policies:
         - PolicyName: RunTask
