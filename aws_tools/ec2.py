@@ -2,11 +2,164 @@ import aioboto3
 from operator import __and__
 from datetime import datetime, UTC
 from typing import Literal, ClassVar, Iterable, AsyncIterable, AsyncGenerator, Generator, Awaitable, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
 CpuArchitecture = Literal["i386", "x86_64", "arm64", "x86_64_mac", "arm64_mac"]
 InstanceState = Literal["pending", "running", "shutting-down", "terminated", "stopping", "stopped"]
+InstanceLifecycle = Literal["spot", "scheduled", "capacity-block", "interruptible-capacity-reservation"]
+
+
+class _SnakeBaseModel(BaseModel):
+    """
+    Handle converting camel case to snake case
+    """
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
+class Ec2InstanceDescription(_SnakeBaseModel):
+    """
+    Simplified response schema of boto3's 'describe_instances'
+    https://docs.aws.amazon.com/boto3/latest/reference/services/ec2/client/describe_instances.html
+    """
+
+    class Tag(_SnakeBaseModel):
+        """
+        """
+        key: str
+        value: str
+
+    class State(_SnakeBaseModel):
+        """
+        State of an EC2 instance
+        """
+        code: str
+        name: InstanceState
+
+    class SecurityGroup(_SnakeBaseModel):
+        """
+        """
+        group_id: str
+        group_name: str
+    
+    class IamInstanceProfile(_SnakeBaseModel):
+        """
+        """
+        arn: str
+        id: str
+    
+    class BlockDeviceMapping(_SnakeBaseModel):
+        """
+        """
+
+        class Ebs(_SnakeBaseModel):
+            """
+            """
+
+            class Operator(_SnakeBaseModel):
+                """
+                """
+                managed: bool
+                principal: str
+                hidden_by_default: bool
+
+            attach_time: datetime
+            delete_on_termination: bool
+            status: Literal["attaching", "attached", "detaching", "detached"]
+            volume_id: str
+            associated_resource: str
+            volume_owner_id: str
+            operator: Operator
+            ebs_card_index: int
+
+        device_name: str
+        ebs: Ebs
+
+    instance_id: str
+    instance_type: str = Field(description="The EC2 naming of the instance type", examples=["m5.xlarge"])
+    instance_lifecycle: InstanceLifecycle
+    state: State
+    launch_time: datetime
+    image_id: str
+    vpc_id: str
+    subnet_id: str
+    security_groups: list[SecurityGroup]
+    private_ip_address: str
+    public_ip_address: str
+    tags: list[Tag]
+    iam_instance_profile: IamInstanceProfile
+    block_device_appings: list[BlockDeviceMapping]
+    cpu_architecture: CpuArchitecture
+
+
+class Ec2InstanceType(_SnakeBaseModel):
+    """
+    Simplified response schema of boto3's 'describe_instance_types'
+    https://docs.aws.amazon.com/boto3/latest/reference/services/ec2/client/describe_instance_types.html
+    """
+
+    class ProcessorInfo(_SnakeBaseModel):
+        supported_architectures: list[CpuArchitecture]
+        sustained_clock_speed_in_ghz: float
+        manufacturer: str
+
+    class VCpuInfo(_SnakeBaseModel):
+        default_v_cpus: int | float
+        default_cores: int
+        default_threads_per_core: int
+        valid_cores: list[int]
+        valid_thread_per_core: list[int]
+
+    class MemoryInfo(_SnakeBaseModel):
+        size_in_miB: int
+    
+    class InstanceStorageInfo(_SnakeBaseModel):
+        total_size_in_gb: int
+    
+    class NetworkInfo(_SnakeBaseModel):
+
+        class EfaInfo(_SnakeBaseModel):
+            maximum_efa_interfaces: int
+
+        ipv4_addresses_per_interface: int
+        ipv6_addresses_per_interface: int
+        ipv6_supported: bool
+        ena_support: Literal["unsupported", "supported", "required"]
+        efa_supported: bool
+        efa_info: EfaInfo
+        secondary_network_supported: bool
+        maximum_secondary_network_interfaces: int
+        ipv4_addresses_per_secondary_interface: int
+
+    class GpuInfo(_SnakeBaseModel):
+
+        class Gpu(_SnakeBaseModel):
+            name: str
+            manufacturer: str
+            count: int
+            logical_gpu_count: int
+            gpu_partition_size: float
+            workloads: list[str]
+            memory_info: "Ec2InstanceType.MemoryInfo"
+
+        gpus: list[Gpu]
+        total_gpu_memory_in_mib: int
+
+    instance_type: str = Field(description="The EC2 naming of the instance type", examples=["m5.xlarge"])
+    current_generation: bool
+    free_tier_eligible: bool
+    supported_usage_classes: list[Literal["spot", "on-demand", "capacity-block"]]
+    bare_metal: bool
+    processor_info: ProcessorInfo
+    v_cpu_info: VCpuInfo
+    memory_info: MemoryInfo
+    instance_storage_supported: bool
+    network_info: NetworkInfo
+    gpu_info: GpuInfo
 
 
 class EC2:
@@ -21,53 +174,6 @@ class EC2:
     >>> async with EC2() as ec2:
     >>>     ...
     """
-
-
-    class InstanceTypeProperties(BaseModel):
-        """
-        Properties of an EC2 instance type
-        """
-
-        class CPU(BaseModel):
-            """
-            Describes a CPU
-            """
-            cores_count: int
-            vcpu_count: Literal["0.25", "0.5"] | int = Field(description="Virtual CPUs, aka threads in SMT/Hyper-Threading")
-            supported_cpu_architectures: list[CpuArchitecture]
-
-        class GPU(BaseModel):
-            """
-            Describes a GPU
-            """
-            name: str
-            vram_MiB: int
-
-        instance_type: str = Field(description="The EC2 naming of the instance type", examples=["m5.xlarge"])
-        cpu: CPU
-        ram_MiB: int
-        gpus: list[GPU]
-
-
-    class InstanceDescription(BaseModel):
-        """
-        Description of an existing EC2 instance
-        """
-        instance_id: str
-        instance_type: str = Field(description="The EC2 naming of the instance type", examples=["m5.xlarge"])
-        state: InstanceState
-        launch_time: datetime
-        image_id: str
-        vpc_id: str
-        subnet_id: str
-        security_group_ids: list[str]
-        private_ip_address: str
-        public_ip_address: str
-        tags: dict[str, str]
-        iam_instance_profile_arn: str
-        ebs_volume_ids: list[str]
-        cpu_architecture: CpuArchitecture
-
 
     def __init__(self):
         self.session = aioboto3.Session()
@@ -97,22 +203,53 @@ class EC2:
     def _raise_not_initialized(self):
         raise RuntimeError(f"{type(self).__name__} object was not awaited on creation, and as such, is not initialized")
 
-    async def list_instance_types_paginated_async(self, page_start_token: str | None) -> tuple[list[InstanceTypeProperties], str]:
+    async def list_instance_types_paginated_async(
+            self,
+            page_start_token: str | None,
+            instance_types_filter: list[str] | None = None,
+            max_page_size: int = 100,
+        ) -> tuple[list[Ec2InstanceType], str | None]:
         """
-        return a list of valid ec2 instance types
+        Returns EC2 instance types in a paginated fashion as tuples of (page, next_page_token)
         """
-        ...
-    
-    async def list_instance_types_async(self) -> AsyncIterable[InstanceTypeProperties]:
-        """
-        """
-        ...
+        kwargs = dict()
+        if instance_types_filter is not None:
+            kwargs.setdefault("Filters", []).append(
+                {
+                    "Name": "instance-type-filter",
+                    "Values": instance_types_filter
+                }
+            )
+        response = await self.client.describe_instance_types(
+            MaxResults=max_page_size,
+            NextToken=page_start_token,
+            **kwargs
+        )
+        return [Ec2InstanceType(**it) for it in response["InstanceTypes"]], response.get("NextToken")
 
-    async def get_instance_type_properties_async(self, type: str) -> InstanceTypeProperties | None:
+    async def list_instance_types_async(
+            self,
+            instance_types_filter: list[str] | None = None
+        ) -> AsyncIterable[Ec2InstanceType]:
+        """
+        Return an async iterable over the ec2 instance types
+        """
+        page_start_token = None
+        while True:
+            page, next_page_token = await self.list_instance_types_paginated_async(page_start_token, instance_types_filter)
+            for it in page:
+                yield it
+            if next_page_token is None:
+                break
+
+    async def get_instance_type_properties_async(self, instance_type: str) -> Ec2InstanceType | None:
         """
         Get the properties of an instance type, or return None if not found
         """
-        ...
+        async for it in self.list_instance_types_async(instance_types_filter=[instance_type]):
+            return it
+        else:
+            return None
 
     async def start_instance_async(
             self,
@@ -124,7 +261,7 @@ class EC2:
             user_data_script: str | None = None,
         ) -> str:
         """
-        Initiate instance bootup
+        Initiate instance bootup, return it's id
         """
         # TODO : how to specify cpu architecture ? enable disable Hyper-Threading ? AWS AMI ? IAM role ?
         response = await self.client.run_instances(
@@ -160,11 +297,11 @@ class EC2:
             instance_state_filter: None | list[InstanceState] = None,
             instance_id_filter: list[str] | None = None,
             max_page_size: int = 100
-        ) -> tuple[list[InstanceDescription], str]:
+        ) -> tuple[list[Ec2InstanceDescription], str | None]:
         """
         Returns (page, next_page_token) with page a list of running instances
         """
-        kwargs = {}
+        kwargs = dict()
         if page_start_token:
             kwargs["NextToken"] = page_start_token
         if instance_state_filter is not None:
@@ -186,23 +323,9 @@ class EC2:
             **kwargs,
         )
         page = [
-            self.InstanceDescription(
-                instance_id=instance["InstanceId"],
-                instance_type=instance["InstanceType"],
-                state=instance["State"]["Name"],
-                launch_time=datetime.fromisoformat(instance["LaunchTime"]).astimezone(UTC),
-                image_id=instance["ImageId"],
-                vpc_id=instance["VpcId"],
-                subnet_id=instance["SubnetId"],
-                security_group_ids=[sg["GroupId"] for sg in instance["SecurityGroups"]],
-                private_ip_address=instance["PrivateIpAdress"],
-                public_ip_address=instance["PublicIpAddress"],
-                tags={tag["Key"]: tag["Value"] for tag in instance["Tags"]},
-                iam_instance_profile_arn=instance["IamInstanceProfile"]["arn"],
-                ebs_volume_ids=[block["Ebs"]["VolumeId"] for block in instance["BlockDeviceMappings"]],
-                cpu_architecture=instance["Architecture"],
-            )
-            for reservation in response["Reservations"] for instance in reservation["Instances"]
+            Ec2InstanceDescription(**instance)
+            for reservation in response["Reservations"]
+            for instance in reservation["Instances"]
         ]
         return page, response.get("NextToken")
 
@@ -210,7 +333,7 @@ class EC2:
             self,
             instance_state_filter: None | list[InstanceState] = None,
             instance_id_filter: list[str] | None = None,
-    ) -> AsyncIterable[InstanceDescription]:
+    ) -> AsyncIterable[Ec2InstanceDescription]:
         """
         Yield instances in an async fashion
         """
@@ -222,7 +345,7 @@ class EC2:
             if next_page_token is None:
                 break
 
-    async def get_instance_async(self, instance_id: str) -> InstanceDescription | None:
+    async def get_instance_async(self, instance_id: str) -> Ec2InstanceDescription | None:
         """
         Describe an existing instance, or return None if it does not exists
         """
