@@ -207,13 +207,14 @@ class ElasticContainerService:
             cluster_name: str,
             task_definition: str,
             subnet_ids : list[str],
-            security_group_arn: str,
+            security_group_ids: list[str],
             fargate_platform_version: str = "LATEST",
             tags: dict = {},
             vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
             memory_MiB_override: int | None = None,
             disk_GiB_override: int | None = None,
             env_overrides: dict | None = None,
+            assign_public_ip: bool = False,
         ) -> ECSTask:
         """
         Run a standalone task on an ECS cluster.
@@ -241,8 +242,8 @@ class ElasticContainerService:
                 "awsvpcConfiguration":
                 {
                     "subnets": subnet_ids,
-                    "securityGroups": [security_group_arn],
-                    "assignPublicIp": "ENABLED"
+                    "securityGroups": security_group_ids,
+                    "assignPublicIp": "ENABLED" if assign_public_ip else "DISABLED"
                 }
             },
             tags=[{"key": k, "value": v} for k, v in tags.items()]

@@ -256,6 +256,7 @@ class EC2:
             user_data_script: str | None = None,
             ssh_key_name: str | None = None,
             one_thread_per_core: bool = False,
+            instance_initiated_shutdown_behaviour: Literal["stop", "terminate"] = "terminate",
         ) -> list[str]:
         """
         Initialize one or several instance, return their IDs
@@ -310,6 +311,7 @@ class EC2:
                     "Groups": security_group_ids,
                 }
             ],
+            InstanceInitiatedShutdownBehavior=instance_initiated_shutdown_behaviour,
             **kwargs
         )
         return [inst["InstanceId"] for inst in response["Instances"]]
