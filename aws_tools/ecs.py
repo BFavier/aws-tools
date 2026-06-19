@@ -148,21 +148,38 @@ class ECSTaskDescription(ECSTask):
     https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs/client/describe_tasks.html
     """
     containers: list[ECSContainer]
-    capacityProviderName: Literal["EC2", "FARGATE"] | None = None
     overrides: Overrides
     platformVersion: str
     platformFamily: str
-    startedBy: str | None = None
-    stopCode: Literal["TaskFailedToStart", "EssentialContainerExited", "UserInitiated", "ServiceSchedulerInitiated", "SpotInterruption", "TerminationNotice"]
-    stoppedAt: datetime
-    stoppedReason: str
-    stoppingAt: datetime
     tags: list[Tag]
+    capacityProviderName: Literal["EC2", "FARGATE"] | None = None
+    startedBy: str | None = None
+    stopCode: Literal["TaskFailedToStart", "EssentialContainerExited", "UserInitiated", "ServiceSchedulerInitiated", "SpotInterruption", "TerminationNotice"] | None = None
+    stoppedAt: datetime | None = None
+    stoppedReason: str | None = None
+    stoppingAt: datetime | None = None
     ephemeralStorage: StorageSize | None = None
     fargateEphemeralStorage: StorageSize | None = None
 
-    def is_running(self):
-        return self.lastStatus in {"PROVISIONING", "PENDING", "ACTIVATING", "RUNNING"}
+    def is_starting(self) -> bool:
+        return self.lastStatus in {
+            "PROVISIONING",
+            "PENDING",
+            "ACTIVATING",
+        }
+
+    def is_running(self) -> bool:
+        return self.lastStatus == "RUNNING"
+
+    def is_stopping(self) -> bool:
+        return self.lastStatus in {
+            "DEACTIVATING",
+            "STOPPING",
+            "DEPROVISIONING",
+        }
+
+    def is_stopped(self) -> bool:
+        return self.lastStatus == "STOPPED"
 
 
 class ElasticContainerService:
