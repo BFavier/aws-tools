@@ -227,6 +227,7 @@ class ElasticContainerService:
             security_group_ids: list[str],
             fargate_platform_version: str = "LATEST",
             tags: dict = {},
+            main_image_name: str = "MainImage",
             vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16, 32] | None = None,
             memory_MiB_override: int | None = None,
             disk_GiB_override: int | None = None,
@@ -239,8 +240,8 @@ class ElasticContainerService:
         """
         assert (disk_GiB_override is None) or (20 <= disk_GiB_override <= 200)
         container_overrides = {
-            "name": task_definition,
-            "cpu": int(float(vCPU_override) * 1024) if vCPU_override is not None else None,
+            "name": main_image_name,
+            "cpu": int(round(float(vCPU_override) * 1024)) if vCPU_override is not None else None,
             "memory": memory_MiB_override,
             "environment": [{"name": k, "value": v} for k, v in env_overrides.items()] if env_overrides is not None else None
         }
