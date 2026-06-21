@@ -227,7 +227,7 @@ class ElasticContainerService:
             security_group_ids: list[str],
             fargate_platform_version: str = "LATEST",
             tags: dict = {},
-            vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16] | None = None,
+            vCPU_override: Literal["0.25", "0.5", 1, 2, 4, 8, 16, 32] | None = None,
             memory_MiB_override: int | None = None,
             disk_GiB_override: int | None = None,
             env_overrides: dict | None = None,
