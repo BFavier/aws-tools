@@ -72,26 +72,26 @@ class SelfSignedCertificate:
 
     def __enter__(self) -> CertKeyPair:
         cert, key = generate_self_signed_cert(**self.kwargs)
-        key_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
-        cert_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
-        key_file.write(
+        self.key_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+        self.cert_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
+        self.key_file.write(
             key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption(),
             )
         )
-        key_file.close()
-        cert_file.write(cert.public_bytes(serialization.Encoding.PEM))
-        cert_file.close()
-        return CertKeyPair(cert_path=cert_file.name, private_key_path=key_file.name)
+        self.key_file.close()
+        self.cert_file.write(cert.public_bytes(serialization.Encoding.PEM))
+        self.cert_file.close()
+        return CertKeyPair(cert_path=self.cert_file.name, private_key_path=self.key_file.name)
 
     def __exit__(self, type_: Type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None) -> bool | None:
         # Delete the temp files, ignore if already removed
         for f in [self.cert_file, self.key_file]:
             try:
                 if f:
-                    os.remove(f)
+                    os.remove(f.name)
             except FileNotFoundError:
                 pass
         # Do not suppress exceptions
