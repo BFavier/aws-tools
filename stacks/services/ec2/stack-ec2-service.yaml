@@ -151,12 +151,13 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -x
-          yum update -y
+          dnf update -y
           # Install CloudWatch Agent
-          yum install amazon-cloudwatch-agent -y
+          dnf install -y amazon-cloudwatch-agent
           # Install and start Docker
-          amazon-linux-extras install docker -y
-          service docker start
+          amazon-linux-extras install -y docker
+          systemctl enable docker
+          systemctl start docker
           usermod -a -G docker ec2-user
           # Pull and run Docker container
           aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${DockerImage}
