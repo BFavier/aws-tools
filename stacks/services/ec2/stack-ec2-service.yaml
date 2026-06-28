@@ -155,7 +155,7 @@ Resources:
           # Install CloudWatch Agent
           dnf install -y amazon-cloudwatch-agent
           # Install and start Docker
-          amazon-linux-extras install -y docker
+          dnf install -y docker
           systemctl enable docker
           systemctl start docker
           usermod -a -G docker ec2-user
