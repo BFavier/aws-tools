@@ -35,7 +35,7 @@ class DynamoDBTest(unittest.TestCase):
         try:
             async def clean_up():
                 async with DynamoDB() as ddb:
-                    ddb.delete_table_async(cls.table_name, blocking=False)
+                    await ddb.delete_table_async(cls.table_name, blocking=False)
             asyncio.run(clean_up())
         except DynamoDBException:
             pass
@@ -172,16 +172,17 @@ class DynamoDBTest(unittest.TestCase):
                 # create the item
                 await table.put_item_async(self.new_item)
                 # modify it
-                assert (
-                    await table.update_item_async(
-                        self.item_id,
-                        put_fields={"new_field": 1},
-                        increment_fields={("array_field", 0, "nested"): 2},
-                        remove_from_sets={"set_field": {"b", "d"}},
-                        delete_fields=["field"],
-                        return_object="NEW"
-                    )
-                ) == {"new_field": 1, "array_field": [{"nested": 12.0}], "set_field": {"a", "c"}}
+                updated = await table.update_item_async(
+                    self.item_id,
+                    put_fields={"new_field": 1},
+                    increment_fields={("array_field", 0, "nested"): 2},
+                    remove_from_sets={"set_field": {"b", "d"}},
+                    delete_fields=["field"],
+                    return_object="NEW"
+                )
+                updated.update({"id": "#"})
+                assert updated == {'new_field': 1, 'event_time': '23h30', 'id': '#', 'array_field': [{'nested': 12}], 'set_field': {'c', 'a'}}
+                assert (await table.update_item_async(self.item_id, put_fields={"wont_work_anyway": 1}, conditions=Attr(("array_field", 0, "nested")).eq(0), return_object="NEW")) is None
                 await table.update_item_async(self.item_id, extend_arrays={"array_field": [None]}, extend_sets={"set_field": {"a", "d"}})
                 assert (await table.get_item_fields_async(self.item_id, {"array_field", "set_field"})) == {"array_field": [{"nested": 12.0}, None], "set_field": {"a", "c", "d"}}
         asyncio.run(test())

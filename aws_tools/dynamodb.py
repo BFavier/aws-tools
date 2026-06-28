@@ -7,11 +7,123 @@ from typing import Self, Literal, Iterable, AsyncIterable, AsyncGenerator, Gener
 from collections.abc import Iterable as IterableABC, AsyncIterable as AsyncIterableABC
 from decimal import Decimal
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
-from boto3.dynamodb.conditions import ConditionBase, Key, Attr
+from boto3.dynamodb.conditions import Key, Attr as Attrddb
 from botocore.exceptions import ClientError
 
 
 KeyType = dict[Literal["HASH", "RANGE"], object]
+
+
+class Conditions:
+    """
+    Base class representing a node in the Conditions tree.
+    """
+
+    def __init__(self, operator: str, operands: list["Conditions", "Attr", Any]):
+        self.operator = operator
+        self.operands = operands
+
+    def __and__(self, other: "Conditions") -> "Conditions":
+        return Conditions('AND', [self, other])
+
+    def __or__(self, other: "Conditions") -> "Conditions":
+        return Conditions('OR', [self, other])
+
+    def __invert__(self) -> "Conditions":
+        return Conditions('NOT', [self])
+
+    def attribute_names(self) -> Iterable[str]:
+        """
+        yield all the attributes in the condition recursively
+        """
+        for leaf in self.operands:
+            if isinstance(leaf, Conditions):
+                yield from leaf.attribute_names()
+            elif isinstance(leaf, Attr):
+                if isinstance(leaf.field_path, str):
+                    yield leaf.field_path
+                else:
+                    yield from (p for p in leaf.field_path if isinstance(p, str))
+
+    def _format_operation(self, operator: str, operands: list[str]) -> str:
+        """
+        Convert to a string operation
+        """
+        if operator.endswith("()"):
+            return f"{operator.removesuffix('()')}({', '.join(operands)})"
+        elif len(operands) == 1:
+            return f"({operator} {operands[0]})"
+        elif len(operands) == 2:
+            return f"({operands[0]} {operator} {operands[1]})"
+        else:
+            raise ValueError(f"Unexpected operands count '{len(operands)}'")
+
+    def _register_value(self, attribute_value: Any, attribute_values: dict[str, Any]) -> str:
+        """
+        Register a condition value in the mapping an return it's reference
+        """
+        attribute_name = f":condition{sum(v.startswith(":condition") for v in attribute_values)}"
+        attribute_values[attribute_name] = attribute_value
+        return attribute_name
+
+    def condition_expression(self, inverse_attribute_names: dict[str, str], attribute_values: dict[str, Any]) -> str:
+        """
+        Returns the condition_expression corresponding to the given condition
+        """
+        operand_strings = [
+            o.condition_expression(inverse_attribute_names, attribute_values) if isinstance(o, Conditions)
+            else o.field_alias(inverse_attribute_names) if isinstance(o, Attr)
+            else self._register_value(o, attribute_values)
+            for o in self.operands
+        ]
+        return self._format_operation(self.operator, operand_strings)
+
+
+class Attr:
+    """
+    The entry point for building query/scan/update conditions
+    """
+    
+    def __init__(self, field_path: str | tuple[str | int]):
+        self.field_path = field_path
+
+    def field_alias(self, inverse_attribute_names: dict[str, str]) -> str:
+        """
+        """
+        if isinstance(self.field_path, str):
+            return inverse_attribute_names[self.field_path]
+        else:
+            return inverse_attribute_names[self.field_path[0]] + "".join(f"[{f}]" if isinstance(f, int) else "."+inverse_attribute_names[f] for f in self.field_path[1:])
+
+    def eq(self, value: Any) -> Conditions:
+        return Conditions('=', [self, value])
+
+    def ne(self, value: Any) -> Conditions:
+        return Conditions('<>', [self, value])
+
+    def lt(self, value: Any) -> Conditions:
+        return Conditions('<', [self, value])
+
+    def lte(self, value: Any) -> Conditions:
+        return Conditions('<=', [self, value])
+
+    def gt(self, value: Any) -> Conditions:
+        return Conditions('>', [self, value])
+
+    def gte(self, value: Any) -> Conditions:
+        return Conditions('>=', [self, value])
+
+    def begins_with(self, value: Any) -> Conditions:
+        return Conditions('begins_with()', [self, value])
+
+    def contains(self, value: Any) -> Conditions:
+        return Conditions('contains()', [self, value])
+
+    def exists(self) -> Conditions:
+        return Conditions('attribute_exists()', [self])
+
+    def not_exists(self) -> Conditions:
+        return Conditions('attribute_not_exists()', [self])
 
 
 class DynamoDBException(Exception):
@@ -279,24 +391,23 @@ class Table(Awaitable["Table"]):
         attribute_names = {v: k for k, v in attributes_mapping.items()}
         return expressions, attribute_names
 
-    def _key_exists_condition(self):
+    def _key_exists_condition(self) -> Conditions:
         """
-        Return the condition that the key exist
+        Return the condition that the key exists
         """
-        condition = Attr(self.keys["HASH"]).exists()
+        conditions = Attr(self.keys["HASH"]).exists()
         if "RANGE" in self.keys.keys():
-            condition = condition & Attr(self.keys["RANGE"]).exists()
-        return condition
+            conditions = conditions & Attr(self.keys["RANGE"]).exists()
+        return conditions
 
-    def _key_not_exists_condition(self, attribute_names: dict[str, str]):
+    def _key_not_exists_condition(self) -> Conditions:
         """
-        Return the condition that the key exist
+        Return the condition that the key does not exist
         """
-        attributes_mapping = {v: k for k, v in attribute_names.items()}
-        condition = f"attribute_not_exists({attributes_mapping[self.keys['HASH']]})"
+        conditions = Attr(self.keys['HASH']).not_exists()
         if "RANGE" in self.keys.keys():
-            condition += f" AND attribute_not_exists({attributes_mapping[self.keys['RANGE']]})"
-        return condition
+            conditions = conditions | Attr(self.keys["RANGE"]).not_exists()
+        return conditions
 
     @property
     def table(self) -> object:
@@ -352,13 +463,26 @@ class Table(Awaitable["Table"]):
         >>> put_item(table, {"uuid": "ID0", "field": 9.0}, overwrite=True, return_object=True)
         {"uuid": "ID0", "field": 10.0}
         """
+        conditions = self._key_not_exists_condition() if not overwrite else None
         _, attribute_names = self._field_path_to_expression(*(v for v in self.keys.values()))
         assert all(k in item.keys() for k in self.keys.values())
+        if conditions is not None:
+            attribute_values = dict()
+            condition_expression = conditions.condition_expression({v: k for k, v in attribute_names.items()}, attribute_values)
+        else:
+            attribute_values = None
+            condition_expression = None
         try:
             response = await self.table.put_item(
                 Item=self._recursive_convert(item, to_decimal=True),
                 ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the overwritten item if any
-                **(dict() if overwrite else dict(ConditionExpression=self._key_not_exists_condition(attribute_names), ExpressionAttributeNames=attribute_names))
+                **(dict() if conditions is None else dict(
+                    ConditionExpression=condition_expression,
+                    ExpressionAttributeNames=attribute_names
+                )),
+                **(dict() if attribute_values is None or len(attribute_values) == 0 else dict(
+                    ExpressionAttributeValues=attribute_values
+                )),
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
@@ -422,11 +546,17 @@ class Table(Awaitable["Table"]):
         >>> delete_item(table, {"id": "ID0"}, return_object=True)
         {"uuid": "ID1", "field": 10.0}
         """
+        conditions = self._key_exists_condition()
+        _, attribute_names = self._field_path_to_expression(*conditions.attribute_names())
+        attribute_values = dict()
+        condition_expression = conditions.condition_expression({v: k for k, v in attribute_names.items()}, attribute_values)
         try:
             response = await self.table.delete_item(
                 Key={k: key_or_item[k] for k in self.keys.values()},
                 ReturnValues="ALL_OLD" if return_object else "NONE",  # returns the removed item
-                ConditionExpression=self._key_exists_condition()
+                ConditionExpression=condition_expression,
+                ExpressionAttributeNames=attribute_names,
+                **(dict() if len(attribute_values) == 0 else dict(ExpressionAttributeValues=attribute_values)),
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
@@ -451,7 +581,7 @@ class Table(Awaitable["Table"]):
 
     async def scan_items_async(
             self,
-            conditions: ConditionBase | None = None,
+            conditions: Conditions | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 100,
             page_start_token: str | None = None,
@@ -465,7 +595,7 @@ class Table(Awaitable["Table"]):
         ------
         table : object
             The dynamodb Table object
-        conditions : ConditionBase
+        conditions : Conditions
             the conditions on which returned items are filtered
         subset : list of str or None
             the subset of fields to return, when fields are not all usefull, to avoid returning the full object
@@ -495,8 +625,18 @@ class Table(Awaitable["Table"]):
         >>>     print(item)
         {"uuid": "ID0", "field": 10.0}
         """
+        if conditions is not None:
+            _, attribute_names = self._field_path_to_expression(*conditions.attribute_names())
+            attribute_values = dict()
+            filter_expression = conditions.condition_expression({v: k for k, v in attribute_names.items()}, attribute_values)
+        else:
+            attribute_names = None
+            attribute_values = None
+            filter_expression = None
         kwargs = {
-            **(dict(FilterExpression=conditions) if conditions is not None else dict()),
+            **(dict(FilterExpression=filter_expression) if filter_expression is not None else dict()),
+            **(dict(ExpressionAttributeNames=attribute_names) if attribute_names is not None else dict()),
+            **(dict(ExpressionAttributeValues=attribute_values) if attribute_values is not None  and len(attribute_values) > 0 else dict()),
             **(dict(ExclusiveStartKey=page_start_token) if page_start_token is not None else dict()),
             **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
             **(dict(Limit=page_size) if page_size is not None else dict())
@@ -506,7 +646,7 @@ class Table(Awaitable["Table"]):
 
     async def scan_all_items_async(
                 self,
-                conditions: ConditionBase | None = None,
+                conditions: Conditions | None = None,
                 subset: list[str] | None = None,
                 page_size: int | None = 100,
                 consistent_read: bool=False,
@@ -534,7 +674,7 @@ class Table(Awaitable["Table"]):
             page_start_token: str | None,
             sort_key_filter: str | tuple[object|None, object|None] = (None, None),
             ascending: bool=True,
-            conditions: ConditionBase | None = None,
+            conditions: Conditions | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 100,
             consistent_read: bool=False,
@@ -556,7 +696,7 @@ class Table(Awaitable["Table"]):
         ascending : bool
             If one of 'hash_key' or 'sort_key' is provided, the results are returned by ascending (or descending) order of 'sort_key'.
             Otherwise it has no effect, as the full scan is not ordered.
-        conditions : ConditionBase
+        conditions : Conditions
             the conditions on which returned items are filtered
         subset : list of str or None
             the subset of fields to return, when fields are not all usefull, to avoid returning the full object
@@ -600,9 +740,19 @@ class Table(Awaitable["Table"]):
                         key_conditions = key_conditions & sort_key.gte(sort_key_start)
                     elif sort_key_end is not None:
                         key_conditions = key_conditions & sort_key.lte(sort_key_end)
+        if conditions is not None:
+            _, attribute_names = self._field_path_to_expression(*conditions.attribute_names())
+            attribute_values = dict()
+            filter_expression = conditions.condition_expression({v: k for k, v in attribute_names.items()}, attribute_values)
+        else:
+            attribute_names = None
+            attribute_values = None
+            filter_expression = None
         # get a single page of results
         kwargs = {
-            **(dict(FilterExpression=conditions) if conditions is not None else dict()),
+            **(dict(FilterExpression=filter_expression) if filter_expression is not None else dict()),
+            **(dict(ExpressionAttributeNames=attribute_names) if attribute_names is not None else dict()),
+            **(dict(ExpressionAttributeValues=attribute_values) if attribute_values is not None and len(attribute_values) > 0 else dict()),
             **(dict(ExclusiveStartKey=page_start_token) if page_start_token is not None else dict()),
             **(dict(ProjectionExpression=",".join(subset)) if subset is not None else dict()),
             **(dict(Limit=page_size) if page_size is not None else dict())
@@ -620,7 +770,7 @@ class Table(Awaitable["Table"]):
             hash_key: object,
             sort_key_filter: str | tuple[object|None, object|None] = (None, None),
             ascending: bool=True,
-            conditions: ConditionBase | None = None,
+            conditions: Conditions | None = None,
             subset: list[str] | None = None,
             page_size: int | None = 100,
             consistent_read: bool = False,
@@ -656,7 +806,7 @@ class Table(Awaitable["Table"]):
             extend_arrays: dict[str | tuple[str | int], list] = {},
             delete_fields: set[str | tuple[str | int]] = set(),
             create_item_if_missing: bool=False,
-            conditions: ConditionBase | None = None,
+            conditions: Conditions | None = None,
             return_object: Literal["OLD", "NEW", None]=None
         ) -> dict | None:
         """
@@ -687,7 +837,7 @@ class Table(Awaitable["Table"]):
             If True, create the item if it does not exist.
             Several nested paths can't be created at once.
             If False, raise an error if the item does not exist.
-        conditions : boto3.dynamodb.conditions.ConditionBase or None
+        conditions : boto3.dynamodb.conditions.Conditions or None
             The conditions to be met. If the condition is not met, the function always returns None, even if return_object is not None.
         return_object : "OLD", "NEW" or None
             If not None, the function return the subset of the item containing the updated fields. (values before update if "OLD", values after update if "NEW")
@@ -699,12 +849,15 @@ class Table(Awaitable["Table"]):
         """
         if sum(len(v) for v in (put_fields, increment_fields, extend_sets, remove_from_sets, extend_arrays, delete_fields)) == 0:
             raise DynamoDBException("At least one update must be made to the item")
+        if not create_item_if_missing:
+            key_exists_condition = self._key_exists_condition()
+            conditions = key_exists_condition if conditions is None else (conditions & key_exists_condition)
         delete_fields = set(delete_fields)
         key = {k: key_or_item[k] for k in self.keys.values()}
         # populating expression and attributes
         expressions, attribute_names = self._field_path_to_expression(
             *put_fields.keys(), *extend_arrays.keys(), *increment_fields.keys(),
-            *extend_sets.keys(), *remove_from_sets.keys(), *delete_fields
+            *extend_sets.keys(), *remove_from_sets.keys(), *delete_fields, *(conditions.attribute_names() if conditions is not None else [])
         )
         attribute_values = {}
         expression_iterable = iter(expressions)
@@ -732,20 +885,20 @@ class Table(Awaitable["Table"]):
         for i, (value, expr) in enumerate(zip(delete_fields, expression_iterable)):
             remove_expressions.append(f"{expr}")
         expression = " ".join(f"{kw} {', '.join(expr)}" for kw, expr in (("SET", set_expressions), ("ADD", add_expressions), ("DELETE", delete_expressions), ("REMOVE", remove_expressions)) if len(expr) > 0)
-        # handling conditions
-        if not create_item_if_missing:
-            key_exists_condition = self._key_exists_condition()
-            conditions = key_exists_condition if conditions is None else (conditions & key_exists_condition)
-        kwargs = (dict() if conditions is None else dict(ConditionExpression=conditions))
+        # handle conditions
+        if conditions is None:
+            condition_expression = None
+        else:
+            condition_expression = conditions.condition_expression({v: k for k, v in attribute_names.items()}, attribute_values)
         # send call to dynamodb
         try:
             response = await self.table.update_item(
                 Key=key,
                 UpdateExpression=expression,
-                ExpressionAttributeValues=attribute_values,
                 ExpressionAttributeNames=attribute_names,
+                ExpressionAttributeValues=attribute_values,
                 ReturnValues=f"ALL_{return_object}" if return_object else "NONE",  # Return the updated values after setting
-                **kwargs
+                **(dict() if condition_expression is None else dict(ConditionExpression=condition_expression))
                 )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ValidationException":
