@@ -311,26 +311,25 @@ class ElasticContainerService:
         return True
 
 
-    async def get_tasks_descriptions_async(self, cluster_name: str, task_arns: Iterable[str], chunk_size: int=100) -> AsyncIterable[ECSTaskDescription | None]:
+    async def get_tasks_async(self, cluster_name: str, task_arns: list[str], chunk_size: int=100) -> dict[str, ECSTaskDescription]:
         """
-        Returns the description of the given tasks, by querying aws by batch. Yield None for non-existant tasks.
+        Returns the description of the given tasks, by querying aws by batch.
         """
-        iterable = (arn for arn in task_arns)
-        subset_arns = [arn for _, arn in zip(range(chunk_size), iterable)]
-        response = await self.client.describe_tasks(cluster=cluster_name, tasks=subset_arns, include=["TAGS"])
-        descriptions = {task["taskArn"]: task for task in response["tasks"]}
-        for arn in subset_arns:
-            desc = descriptions.get(arn)
-            if desc is not None:
-                desc = ECSTaskDescription(**desc)
-            yield desc
+        subset_arns = [task_arns[i:i+chunk_size] for i in range(0, chunk_size)]
+        response = []
+        for arns in await subset_arns:
+            response.extend(await self.client.describe_tasks(cluster=cluster_name, tasks=arns, include=["TAGS"])["tasks"])
+        descriptions = {task["taskArn"]: task for task in response}
+        return {arn: ECSTaskDescription(**descriptions[arn]) for arn in task_arns if arn in descriptions.keys()}
 
 
-    async def get_task_description_async(self, cluster_name: str, task_arn: str) -> ECSTaskDescription | None:
+    async def get_task_async(self, cluster_name: str, task_arn: str) -> ECSTaskDescription | None:
         """
+        Returns the description of the given task
         """
-        async for desc in self.get_tasks_descriptions_async(cluster_name, [task_arn]):
-            return desc
+        tasks = await self.get_tasks_async(cluster_name, [task_arn])
+        return tasks.get(task_arn)
+
 
     async def get_task_definition_async(self, task_definition: str) -> ECSTaskDefinition:
         """
@@ -339,7 +338,7 @@ class ElasticContainerService:
         `task_definition` may be:
         - family
         - family:revision
-        - full ARN
+        - task definition ARN (and not task ARN)
         """
         response = await self.client.describe_task_definition(
             taskDefinition=task_definition,

@@ -1,4 +1,5 @@
 from aiobotocore.session import get_session, AioBaseClient
+from datetime import datetime
 
 
 class ElasticContainerRegistry:
@@ -46,20 +47,15 @@ class ElasticContainerRegistry:
         return [repo["repositoryName"] async for page in paginator.paginate() for repo in page['repositories']]
 
 
-    async def list_image_tags_async(self, repository_name: str) -> list[str]:
+    async def list_image_tags_async(self, repository_name: str) -> dict[str, datetime]:
         """
-        Return all the tagged ecr images from the ecr repository
+        Return a dict of {tag: image_pushed_timestamp}
         """
-        all_image_tags = []
-        next_token = None
-        while True:
-            response = await self.client.list_images(
-                repositoryName=repository_name,
-                filter={'tagStatus': 'TAGGED'},
-                **(dict(nextToken=next_token) if next_token is not None else dict())
-            )
-            images, next_token = response["imageIds"], response.get("nextToken", None)
-            all_image_tags.extend([img["imageTag"]for img in images])
-            if next_token is None:
-                break
-        return all_image_tags
+        paginator = self.client.get_paginator("describe_images")
+        results = {}
+        async for page in paginator.paginate(repositoryName=repository_name):
+            for image in page["imageDetails"]:
+                pushed_at = image["imagePushedAt"]
+                for tag in image.get("imageTags", []):
+                    results[tag] = pushed_at
+        return results
