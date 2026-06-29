@@ -182,6 +182,25 @@ class ECSTaskDescription(ECSTask):
         return self.lastStatus == "STOPPED"
 
 
+class ECSTaskDefinition(BaseModel):
+    taskDefinitionArn: str
+    family: str
+    revision: int
+    networkMode: str
+    status: str
+    requiresCompatibilities: list[str]
+    cpu: str | None = None
+    memory: str | None = None
+    executionRoleArn: str | None = None
+    taskRoleArn: str | None = None
+    containerDefinitions: list[dict]
+    volumes: list[dict]
+    placementConstraints: list[dict]
+    runtimePlatform: dict | None = None
+    registeredAt: datetime | None = None
+    registeredBy: str | None = None
+
+
 class ElasticContainerService:
     """
     >>> ecs = ElasticContainerService()
@@ -312,3 +331,35 @@ class ElasticContainerService:
         """
         async for desc in self.get_tasks_descriptions_async(cluster_name, [task_arn]):
             return desc
+
+    async def get_task_definition_async(self, task_definition: str) -> ECSTaskDefinition:
+        """
+        Returns the description of a task definition.
+
+        `task_definition` may be:
+        - family
+        - family:revision
+        - full ARN
+        """
+        response = await self.client.describe_task_definition(
+            taskDefinition=task_definition,
+            include=["TAGS"],
+        )
+        return ECSTaskDefinition(**response["taskDefinition"])
+
+    async def list_task_definition_arns_async(
+        self,
+        family_prefix: str,
+        status: Literal["ACTIVE", "INACTIVE", "DELETE_IN_PROGRESS"] | None = None,
+        sort: Literal["ASC", "DESC"] = "ASC",
+    ) -> list[str]:
+        paginator = self.client.get_paginator("list_task_definitions")
+        arns = []
+        kwargs = (dict() if status is None else dict(status=status))
+        async for page in paginator.paginate(
+                    familyPrefix=family_prefix,
+                    sort=sort,
+                    **kwargs
+                ):
+            arns.extend(page["taskDefinitionArns"])
+        return arns
